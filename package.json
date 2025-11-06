@@ -4,12 +4,10 @@
   "description": "Dog barking detector web app deployed to GitHub Pages",
   "homepage": "https://jatacid.github.io/dogbarkingdetector",
   "scripts": {
-    "deploy": "npm run predeploy && gh-pages -d dogbarkingdetector",
-    "predeploy": "node deploy-prep.js",
+    "deploy": "node deploy-prep.js && npx gh-pages -d dogbarkingdetector",
     "dev": "npx http-server dogbarkingdetector -p 8080"
   },
   "devDependencies": {
-    "gh-pages": "^6.3.0",
     "http-server": "^14.1.1"
   }
 }
