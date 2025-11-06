@@ -1,3 +1,0 @@
-never build tests
-don't open chrome
-don't run python or npm commands unless asked to by the user

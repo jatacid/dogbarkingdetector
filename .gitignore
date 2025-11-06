@@ -30,5 +30,8 @@ build/
 .vscode/
 .idea/
 
-# FTP related (legacy)
-upload-ftp.js
+# Lock files
+package-lock.json
+
+# IDE and project specific files
+.clinerules
