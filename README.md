@@ -1,6 +1,13 @@
 # Dog Barking Detector
 
+**Live Demo:** https://jatacid.github.io/dogbarkingdetector
+**Domain:** http://dogbarkingdetector.com/
+
 A browser-based, offline dog barking detection tool that uses machine learning to identify and log dog vocalizations in real-time. Built with TensorFlow.js and the YAMNet audio classification model.
+
+## Static Files
+
+All application files are located in the `/dogbarkingdetector` folder:
 
 ## Project Structure
 
@@ -30,11 +37,6 @@ dogbarkingdetector/
         └── variables.index
 ```
 
-## Root Files
-
-- `package.json` - Node.js configuration for FTP upload and development server
-- `upload-ftp.js` - Script to deploy the app via FTP
-- `version.json` - Version information
 
 ## How It Works
 
@@ -98,17 +100,6 @@ Debug mode provides detailed logging and additional information for troubleshoot
 6. Log detection with timestamp and audio data
 7. Debounce detections to prevent spam (4-second minimum interval)
 
-### Development
-
-To run locally:
-```bash
-npm run dev
-```
-
-To deploy via FTP:
-```bash
-npm run upload
-```
 
 ### Browser Compatibility
 

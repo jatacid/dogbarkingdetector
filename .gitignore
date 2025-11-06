@@ -35,3 +35,8 @@ package-lock.json
 
 # IDE and project specific files
 .clinerules
+
+# Build and deployment files
+package.json
+version.json
+deploy-prep.js
