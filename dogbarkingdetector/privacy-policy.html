@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Open Source Dog Barking Detector</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.png?v=1762124018504">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #ffffff;
+            color: #000000;
+            margin: 0;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #000000;
+            text-align: center;
+        }
+        h2 {
+            color: #000000;
+            margin-top: 30px;
+        }
+        p {
+            margin-bottom: 15px;
+        }
+        a {
+            color: #000000;
+            text-decoration: underline;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background-color: #000000;
+            color: #ffffff;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            background-color: #333333;
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-link">← Back to Dog Barking Detector</a>
+
+    <h1>Privacy Policy</h1>
+
+    <p><strong>Last updated:</strong> November 2025</p>
+
+    <h2>Overview</h2>
+    <p>The Open Source Dog Barking Detector is a completely offline, browser-based application that processes all audio data locally on your device. We are committed to protecting your privacy and ensuring that no personal data is collected, stored, or transmitted.</p>
+
+    <h2>How the Tool Works</h2>
+    <p>This tool uses machine learning (specifically the YAMNet audio classification model via TensorFlow.js) to analyze audio input from your microphone in real-time. All processing happens entirely within your web browser - no audio data, recordings, or analysis results are ever sent to external servers.</p>
+
+    <h2>Data Collection and Storage</h2>
+    <p><strong>We do not collect, store, or transmit any personal data.</strong></p>
+    <ul>
+        <li>No audio recordings are saved permanently</li>
+        <li>No detection logs are uploaded to servers</li>
+        <li>No user information is collected</li>
+        <li>No cookies are used for tracking</li>
+        <li>No analytics data is sent to third parties</li>
+    </ul>
+
+    <h2>Audio Processing</h2>
+    <p>Audio is captured temporarily in your browser's memory for real-time analysis. The audio data is processed in 1-second chunks and immediately discarded after classification. No audio is stored on your device beyond the temporary buffer required for processing.</p>
+
+    <h2>Third-Party Services</h2>
+    <p>The only external resources loaded are:</p>
+    <ul>
+        <li>TensorFlow.js and YAMNet model files (hosted on CDN for performance)</li>
+        <li>PayPal donation button (optional, only if you choose to donate)</li>
+    </ul>
+    <p>These resources are loaded directly from their respective CDNs and do not involve data transmission from your device.</p>
+
+    <h2>Analytics</h2>
+    <p>This website uses Cloudflare for basic web analytics. Cloudflare may collect anonymous information about your visit, such as:</p>
+    <ul>
+        <li>IP address (anonymized)</li>
+        <li>Browser type and version</li>
+        <li>Pages visited</li>
+        <li>Time spent on site</li>
+    </ul>
+    <p>This data is used solely for website performance monitoring and is not linked to any personal information. You can learn more about Cloudflare's privacy practices at <a href="https://www.cloudflare.com/privacypolicy/" target="_blank">https://www.cloudflare.com/privacypolicy/</a>.</p>
+
+    <h2>Microphone Access</h2>
+    <p>The tool requests access to your microphone only when you click "Start Recording". Audio data is processed locally and is not transmitted anywhere. You can revoke microphone access at any time through your browser settings.</p>
+
+    <h2>Browser Permissions</h2>
+    <p>The application requires the following browser permissions:</p>
+    <ul>
+        <li><strong>getUserMedia</strong>: For microphone access (granted when you start recording)</li>
+        <li><strong>Web Audio API</strong>: For audio processing (no permission required)</li>
+    </ul>
+
+    <h2>Data Security</h2>
+    <p>Since all processing happens locally in your browser, your audio data never leaves your device. The security of your data depends on your browser's security and your device's security measures.</p>
+
+    <h2>Changes to This Policy</h2>
+    <p>This privacy policy may be updated occasionally. Any changes will be reflected in the "Last updated" date at the top of this page.</p>
+
+    <h2>Contact</h2>
+    <p>If you have any questions about this privacy policy, please contact us at <a href="https://j7digital.com/" target="_blank">https://j7digital.com/</a>.</p>
+
+    <h2>Open Source</h2>
+    <p>This tool is completely open source. You can review the code and verify our privacy claims by visiting our <a href="https://github.com/yourusername/dogbarkingdetector" target="_blank">GitHub repository</a>.</p>
+</body>
+</html>

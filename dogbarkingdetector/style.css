@@ -1,0 +1,587 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #ffffff;
+    color: #000000;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #000000;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 0;
+    font-size: 16px;
+    font-weight: bold;
+    z-index: 1000;
+    animation: toast-appear 0.3s ease-out;
+}
+
+@keyframes toast-appear {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+.toast.fade-out {
+    animation: toast-disappear 0.3s ease-in forwards;
+}
+
+@keyframes toast-disappear {
+    from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+}
+
+.container {
+    text-align: center;
+    max-width: 1200px;
+    width: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+    background-color: white;
+}
+
+h1 {
+    margin-bottom: 30px;
+    font-size: 2.5rem;
+    color: #000000;
+}
+
+.description {
+    margin-bottom: 30px;
+    font-size: 1.1rem;
+    color: #000000;
+    text-align: center;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.5;
+}
+
+h2 {
+    margin-bottom: 15px;
+    font-size: 1.5rem;
+    color: #000000;
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 30px;
+    margin-top: 20px;
+}
+
+.sensitivity-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background-color: #f0f0f0;
+    padding: 10px 20px;
+    margin-bottom: 20px;
+}
+
+.sensitivity-container label {
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+.sensitivity-container input[type="range"] {
+    width: 150px;
+    margin: 0 10px;
+}
+
+.sensitivity-container span {
+    font-size: 1rem;
+    min-width: 30px;
+    text-align: center;
+}
+
+button {
+    background-color: #000000;
+    border: none;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    position: relative;
+    border-radius: 4px;
+}
+
+button:hover {
+    background-color: #333333;
+}
+
+button:disabled {
+    background-color: #666;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+button.stop-btn {
+    background-color: #dc3545;
+    color: white;
+}
+
+button.loading {
+    padding-right: 45px;
+}
+
+button.loading::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    right: 15px;
+    margin-top: -8px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: button-loading-spinner 1s linear infinite;
+}
+
+@keyframes button-loading-spinner {
+    from {
+        transform: rotate(0turn);
+    }
+    to {
+        transform: rotate(1turn);
+    }
+}
+
+#waveform {
+    margin: 20px auto;
+    background-color: #ffffff;
+    border: 1px solid #000000;
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.audio-placeholder, .detection-placeholder {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 40px 20px;
+    background-color: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.detection-section, .dog-log-section, .log-section, .audio-recording-section {
+    margin: 30px 0;
+    text-align: left;
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 20px;
+    max-width: 100%;
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dog-log-section {
+    margin-bottom: 200px;
+}
+
+#detectionList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.detection-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: #f0f0f0;
+    border-left: 4px solid #000000;
+}
+
+.detection-item .class-name {
+    font-weight: bold;
+}
+
+.detection-item .confidence {
+    color: #000000;
+    font-weight: bold;
+}
+
+.placeholder-item .confidence {
+    color: #666;
+}
+
+#dogLogTable {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #ffffff;
+    color: #000000;
+}
+
+#dogLogTable th, #dogLogTable td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #000000;
+}
+
+#dogLogTable th {
+    background-color: #f0f0f0;
+    font-weight: bold;
+    color: #000000;
+}
+
+#dogLogTable tbody tr:nth-child(even) {
+    background-color: #f0f0f0;
+}
+
+#dogLogTable tbody tr:hover {
+    background-color: #cccccc;
+}
+
+#dogLogTable td:last-child {
+    padding: 12px 4px;
+    text-align: right;
+    width: 30px;
+}
+
+.placeholder-row {
+    color: #666;
+    font-style: italic;
+}
+
+.placeholder-row td {
+    color: #666;
+}
+
+.play-btn {
+    padding: 6px 10px;
+    font-size: 14px;
+    min-width: 35px;
+    background-color: #000000;
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.play-btn:hover {
+    background-color: #333333;
+}
+
+.delete-btn {
+    padding: 0;
+    font-size: 34px;
+    font-weight: bold;
+    background: none;
+    color: #dc3545;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1;
+    width: 34px;
+    height: 34px;
+}
+
+.delete-btn:hover {
+    color: white;
+    background-color: #666666;
+}
+
+.donation-section {
+    margin: 30px 0;
+    text-align: center;
+}
+
+.paypal-button {
+    display: inline-block;
+    background: linear-gradient(135deg, #0070ba 0%, #005ea6 100%);
+    color: #ffffff !important;
+    text-decoration: none !important;
+    padding: 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 112, 186, 0.3);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.paypal-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.paypal-button:hover::before {
+    left: 100%;
+}
+
+.paypal-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 112, 186, 0.4);
+    text-decoration: none !important;
+}
+
+.paypal-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    color: #ffffff !important;
+    position: relative;
+    z-index: 1;
+}
+
+.donation-text {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.4;
+    text-align: center;
+    font-weight: 500;
+}
+
+.paypal-logo {
+    height: 38px;
+    width: auto;
+    filter: brightness(0) invert(1);
+}
+
+.info-columns {
+    display: flex;
+    gap: 20px;
+    margin: 30px 0;
+}
+
+.column {
+    flex: 1;
+    background-color: #f8f8f8;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.column h3 {
+    margin-top: 0;
+    color: #000000;
+}
+
+.column p {
+    margin-bottom: 10px;
+}
+
+.column a {
+    color: #000000;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+.column a:hover {
+    color: #333333;
+    text-decoration: underline;
+}
+
+.github-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, #24292e 0%, #1b1f23 100%);
+    color: #ffffff !important;
+    text-decoration: none !important;
+    font-weight: 600;
+    padding: 12px 18px;
+    border-radius: 8px;
+    border: 1px solid #30363d;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.github-button:hover {
+    background: linear-gradient(135deg, #1b1f23 0%, #161b22 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    text-decoration: none !important;
+}
+
+.github-button svg {
+    fill: #ffffff;
+    transition: transform 0.3s ease;
+}
+
+.github-button:hover svg {
+    transform: scale(1.1);
+}
+
+.footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: #000000;
+    color: #ffffff;
+    padding: 10px 20px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.footer-content {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    align-items: center;
+}
+
+.footer a {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
+.footer a:hover {
+    color: #cccccc;
+}
+
+
+.debug-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: #f0f0f0;
+    border-top: 2px solid #000000;
+    padding: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 12px;
+    z-index: 999;
+}
+
+.debug-log {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.debug-log div {
+    margin: 2px 0;
+    padding: 2px 4px;
+    background-color: #ffffff;
+    border-left: 3px solid #000000;
+}
+
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+        max-width: 100%;
+    }
+
+    h1 {
+        font-size: 2rem;
+    }
+
+    h2 {
+        font-size: 1.2rem;
+    }
+
+    .controls {
+        gap: 10px;
+    }
+
+    .sensitivity-container {
+        flex-direction: column;
+        gap: 8px;
+        padding: 15px;
+    }
+
+    .sensitivity-container input[type="range"] {
+        width: 100%;
+        max-width: 200px;
+    }
+
+    #waveform {
+        width: 100%;
+        height: 150px;
+    }
+
+    .detection-section, .dog-log-section, .log-section {
+        padding: 15px;
+    }
+
+    #dogLogTable th, #dogLogTable td {
+        padding: 8px 6px;
+        font-size: 0.9rem;
+    }
+
+    .description {
+        font-size: 1rem;
+        margin-bottom: 20px;
+    }
+
+    .donation-section {
+        margin: 20px 0;
+    }
+
+    .paypal-logo {
+        height: 30px;
+    }
+
+    .paypal-button {
+        padding: 15px;
+    }
+
+    .paypal-content {
+        gap: 10px;
+    }
+
+    .info-columns {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .footer-content {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+}

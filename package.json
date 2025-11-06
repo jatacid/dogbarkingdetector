@@ -1,0 +1,15 @@
+{
+  "name": "dogbarkingdetector",
+  "version": "1.0.0",
+  "description": "Dog barking detector web app deployed to GitHub Pages",
+  "homepage": "https://yourusername.github.io/dogbarkingdetector",
+  "scripts": {
+    "deploy": "npm run predeploy && gh-pages -d dogbarkingdetector",
+    "predeploy": "node deploy-prep.js",
+    "dev": "npx http-server dogbarkingdetector -p 8080"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0",
+    "http-server": "^14.1.1"
+  }
+}
