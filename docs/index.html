@@ -42,7 +42,7 @@
 </head>
 <body>
     <header class="header">
-        <h1 style="padding-right: 40px;"><img src="favicon.png?v=1.0.12" alt="Dog Barking Detector Icon" style="width: 40px; height: 40px; vertical-align: middle; margin-right: 10px;">Dog Barking Detector</h1>
+        <a href="https://dogbarkingdetector.com" style="text-decoration: none;"><h1 style="padding-right: 40px;"><img src="favicon.png?v=1.0.12" alt="Dog Barking Detector Icon" style="width: 40px; height: 40px; vertical-align: middle; margin-right: 10px;">Dog Barking Detector</h1></a>
     </header>
     <div class="container">
         <div id="toast" class="toast" style="display: none;"></div>
@@ -50,7 +50,7 @@
         <div class="info-columns">
             <div class="column">
                 <h3>How it Works</h3>
-                <p>This tool uses the <a href="https://github.com/tensorflow/models/tree/master/research/audioset/yamnet" target="_blank">YAMNet</a> audio classification model, a deep neural network trained on the <a href="https://research.google.com/audioset/" target="_blank">AudioSet</a> dataset. It processes audio in real-time, analyzing 1-second chunks at 16kHz sample rate. The model classifies sounds into 521 categories, with specific focus on dog vocalizations (classes 70-75: Bark, Yip, Howl, Bow-wow, Growling, Whimper).</p>
+                <p>This tool uses the <a href="https://github.com/tensorflow/models/tree/master/research/audioset/yamnet" target="_blank">YAMNet</a> audio classification model, a deep neural network trained on the <a href="https://research.google.com/audioset/" target="_blank">AudioSet</a> dataset. It processes audio in real-time, analyzing 1-second chunks at 16kHz sample rate. The model classifies sounds into 521 categories, with specific focus on dog vocalizations (classes 70-75: Bark, Yip, Howl, Bow-wow, Growling, Whimper, etc).</p>
                 <p>Built with <a href="https://www.tensorflow.org/js" target="_blank">TensorFlow.js</a> for client-side inference, ensuring complete privacy as all processing happens in your browser. Audio capture and processing is handled through the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API" target="_blank">Web Audio API</a>.</p>
                 <p>The YAMNet model is loaded from <a href="https://tfhub.dev/google/yamnet/1" target="_blank">TensorFlow Hub</a> and converted to TensorFlow.js format for browser compatibility.</p>
             </div>
