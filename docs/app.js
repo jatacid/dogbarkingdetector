@@ -1,12 +1,11 @@
 let model;
 let audioContext;
-let analyser;
 let microphone;
 let processor;
 let isRecording = false;
+let isLoaded = false;
 let startStopBtn;
-let canvas;
-let canvasContext;
+let loadBtn;
 let animationId;
 let sensitivitySlider;
 let sensitivityValue;
@@ -14,42 +13,183 @@ let detectionList;
 let dogLogBody;
 let sensitivity = 0.3;
 let lastDetectionTime = 0;
-let modelLoaded = false;
-let debugMode = false;
-let debugLogElement;
-let audioChunkCounter = 0;
+let lastLoggedDetectionTime = 0;
 let mediaStream = null;
+let saveAsHtmlBtn;
+let saveAsCsvBtn;
+let audioTickCount = 0;
+const WINDOW_SIZE = 15360; // 0.96s at 16kHz
+const HOP_SIZE = 7680; // 0.48s at 16kHz
+const SAVE_BUFFER_SIZE = 32000; // 2s at 16kHz for full bark capture
+let windowBuffer = new Float32Array(WINDOW_SIZE);
+let saveBuffer = new Float32Array(SAVE_BUFFER_SIZE);
+let saveIndex = 0;
+let bufferFilled = false;
+let windowPosition = 0; // Track position in the window
+let predictionBuffer = []; // Buffer to hold predictions over 0.96s period
+let predictionCount = 0; // Counter for predictions in current period
+
+function updateProgressBar(percentage) {
+    const progressFill = loadBtn.querySelector('.progress-fill');
+    if (progressFill) {
+        progressFill.style.width = percentage + '%';
+    }
+}
 
 async function init() {
     startStopBtn = document.getElementById('startStopBtn');
-    canvas = document.getElementById('waveform');
-    canvasContext = canvas.getContext('2d');
+    loadBtn = document.getElementById('loadBtn');
     sensitivitySlider = document.getElementById('sensitivity');
     sensitivityValue = document.getElementById('sensitivityValue');
     detectionList = document.getElementById('detectionList');
     dogLogBody = document.getElementById('dogLogBody');
+    saveAsHtmlBtn = document.getElementById('saveAsHtmlBtn');
+    saveAsCsvBtn = document.getElementById('saveAsCsvBtn');
 
-    // Check for debug mode
-    const urlParams = new URLSearchParams(window.location.search);
-    debugMode = urlParams.has('debug');
-    if (debugMode) {
-        debugLogElement = document.getElementById('debugLog');
-        document.getElementById('debugPanel').style.display = 'block';
-        debugLog('=== DEBUG MODE STARTED ===');
-        debugLog(`User Agent: ${navigator.userAgent}`);
-        debugLog(`Platform: ${navigator.platform}`);
-        debugLog(`Audio Context Support: ${!!window.AudioContext || !!window.webkitAudioContext}`);
-        debugLog(`Media Devices Support: ${!!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia}`);
-    }
-
+    loadBtn.addEventListener('click', loadModels);
     startStopBtn.addEventListener('click', toggleRecording);
     sensitivitySlider.addEventListener('input', updateSensitivity);
+    saveAsHtmlBtn.addEventListener('click', saveAsHtml);
+    saveAsCsvBtn.addEventListener('click', saveAsCsv);
 
     // Add placeholder entries to dog log immediately
     addPlaceholderEntries();
 
     // Initialize detection list with placeholder values
     updateDetectionList([]);
+}
+
+async function loadModels() {
+    try {
+        loadBtn.disabled = true;
+        loadBtn.classList.add('loading');
+        loadBtn.querySelector('.button-text').textContent = 'Initializing...';
+        updateProgressBar(10);
+
+        log('Initializing...');
+
+        // Set WASM backend explicitly for consistent performance across devices
+        await tf.setBackend('wasm');
+        await tf.ready();
+        log('WASM backend ready');
+        loadBtn.querySelector('.button-text').textContent = 'Setting up TensorFlow...';
+        updateProgressBar(25);
+
+        loadBtn.querySelector('.button-text').textContent = 'Loading YAMNet model...';
+        updateProgressBar(40);
+        model = await yamnet.load('./model/', {
+            requestInit: {
+                cache: 'no-cache'
+            }
+        });
+        log('YAMNet model loaded');
+        updateProgressBar(60);
+
+        // Request microphone access with simplified constraints
+        loadBtn.querySelector('.button-text').textContent = 'Requesting microphone access...';
+        updateProgressBar(70);
+        const constraints = {
+            audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: true,  // Enable AGC to boost low mobile audio
+                channelCount: 1,
+                sampleRate: { ideal: 16000 }
+            }
+        };
+
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        log('Microphone ready');
+        loadBtn.querySelector('.button-text').textContent = 'Setting up audio processing...';
+        updateProgressBar(80);
+
+        // Create AudioContext
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        window.audioContextInstance = audioContext;
+
+        // Create microphone source
+        microphone = audioContext.createMediaStreamSource(mediaStream);
+
+
+        // Create AudioWorklet processor
+        await audioContext.audioWorklet.addModule('audio-processor.js');
+        processor = new AudioWorkletNode(audioContext, 'audio-processor');
+        microphone.connect(processor);
+        processor.connect(audioContext.destination);
+
+        // Setup audio processing handler
+        let audioBuffer = [];
+        processor.port.onmessage = (event) => {
+            if (event.data.type === 'audioData' && isRecording) {
+                audioBuffer.push(...event.data.data);
+
+                // Process in small chunks to maintain real-time processing
+                const sampleRate = audioContext.sampleRate;
+                const chunkSize = Math.floor(sampleRate * 0.1); // 100ms chunks
+
+                while (audioBuffer.length >= chunkSize) {
+                    const chunk = audioBuffer.splice(0, chunkSize);
+                    audioTickCount++;
+
+                    // Resample chunk to 16kHz first
+                    const resampledChunk = resampleAudio(chunk, sampleRate, 16000);
+
+                    // Add resampled data to save buffer for full bark capture
+                    for (let i = 0; i < resampledChunk.length; i++) {
+                        saveBuffer[saveIndex] = resampledChunk[i];
+                        saveIndex = (saveIndex + 1) % SAVE_BUFFER_SIZE;
+                        if (saveIndex === 0) bufferFilled = true;
+                    }
+
+                    // Add resampled data to window buffer
+                    processAudioChunk(resampledChunk, 16000);
+                }
+            }
+        };
+
+        loadBtn.querySelector('.button-text').textContent = 'Warming up model...';
+        updateProgressBar(90);
+        // Warm up YAMNet inference engine with a test prediction
+        const testBuffer = new Float32Array(16000).fill(0);
+        const warmupPredictions = await model.predict(testBuffer);
+        warmupPredictions.dispose();
+
+        // Everything loaded successfully
+        isLoaded = true;
+        loadBtn.classList.remove('loading');
+        loadBtn.querySelector('.button-text').textContent = 'Loaded ✓';
+        loadBtn.disabled = true;
+        startStopBtn.disabled = false;
+        updateProgressBar(100);
+
+        // Keep progress bar visible briefly after completion
+        setTimeout(() => {
+            updateProgressBar(0);
+        }, 2000);
+
+        log('Ready to record');
+        showToast('Models loaded! Ready to record.');
+
+    } catch (error) {
+        const errorDetails = `Name: ${error.name || 'Unknown'}, Message: ${error.message || error.toString() || 'No message'}, Stack: ${error.stack ? error.stack.split('\n')[0] : 'No stack'}`;
+        log(`ERROR: ${error.message}`);
+
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            showToast('Microphone access denied. Please allow access and try again.');
+        } else {
+            showToast(`Error: ${error.message || error.toString()}`);
+        }
+
+        loadBtn.disabled = false;
+        loadBtn.classList.remove('loading');
+        loadBtn.querySelector('.button-text').textContent = 'Load Models & Setup Mic';
+        updateProgressBar(0);
+
+        // Reset progress bar on error
+        setTimeout(() => {
+            updateProgressBar(0);
+        }, 100);
+    }
 }
 
 async function toggleRecording() {
@@ -61,404 +201,233 @@ async function toggleRecording() {
 }
 
 async function startRecording() {
+    if (!isLoaded) {
+        showToast('Please load models first');
+        return;
+    }
+
     try {
-        // Disable button and show loading state
-        startStopBtn.disabled = true;
-        startStopBtn.classList.add('loading');
-        startStopBtn.textContent = 'Initializing...';
+        log('Recording started');
 
-        // Load TensorFlow and model only when starting recording (if not already loaded)
-        if (!modelLoaded) {
-            await tf.ready();
-            startStopBtn.textContent = 'Loading model...';
-            try {
-                model = await yamnet.load('./model/');
-                modelLoaded = true;
-            } catch (error) {
-                if (debugMode) {
-                    debugLog('ERROR: Failed to load model: ' + error.message);
-                }
-                console.error('ERROR: Failed to load model: ' + error.message);
-                startStopBtn.disabled = false;
-                startStopBtn.classList.remove('loading');
-                startStopBtn.textContent = 'Start Recording';
-                return;
-            }
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true
-        });
-        mediaStream = stream; // Store reference to stop tracks later
-
-        startStopBtn.textContent = 'Setting up audio...';
-        try {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            window.audioContextInstance = audioContext; // Store globally for reuse in playback
-            if (debugMode) {
-                debugLog(`AudioContext created: sampleRate=${audioContext.sampleRate}Hz, state=${audioContext.state}`);
-                debugLog(`MediaStream: ${stream.getAudioTracks().length} audio track(s)`);
-                const track = stream.getAudioTracks()[0];
-                if (track) {
-                    debugLog(`Audio Track: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
-                    const settings = track.getSettings();
-                    debugLog(`Track Settings: sampleRate=${settings.sampleRate}, channelCount=${settings.channelCount}, echoCancellation=${settings.echoCancellation}, noiseSuppression=${settings.noiseSuppression}, autoGainControl=${settings.autoGainControl}`);
-                }
-            }
-            console.log(`AudioContext sample rate: ${audioContext.sampleRate}Hz`);
-            microphone = audioContext.createMediaStreamSource(stream);
-        } catch (audioError) {
-            console.error('AudioContext error: ' + audioError.message);
-            if (debugMode) {
-                debugLog(`AudioContext error: ${audioError.message}`);
-            }
-            console.log(`AudioContext error: ${audioError.message}`);
-            startStopBtn.disabled = false;
-            startStopBtn.classList.remove('loading');
-            startStopBtn.textContent = 'Start Recording';
-            showToast('Audio setup failed: ' + audioError.message);
-            return;
-        }
-
-        // Create analyser for waveform visualization
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 2048;
-        analyser.smoothingTimeConstant = 0; // No smoothing for raw data
-        microphone.connect(analyser);
-
-        // Load and create AudioWorklet for raw audio capture
-        await audioContext.audioWorklet.addModule('audio-processor.js');
-        processor = new AudioWorkletNode(audioContext, 'audio-processor');
-
-        // Create analyser for waveform visualization
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 2048;
-        microphone.connect(analyser);
-
-        microphone.connect(processor);
-        if (!debugMode) {
-            processor.connect(audioContext.destination);
-        }
-
-        let audioBuffer = [];
-
-        processor.port.onmessage = (event) => {
-            if (event.data.type === 'audioData') {
-                const inputBuffer = event.data.data;
-                const stats = event.data.stats;
-                audioBuffer.push(...inputBuffer);
-
-                // Remove AudioWorklet logging to reduce spam
-
-                // Process in 1s chunks (YAMNet standard)
-                const sampleRate = audioContext.sampleRate;
-                const chunkSize = sampleRate * 1; // 1s
-                if (audioBuffer.length >= chunkSize) {
-                    const chunk = audioBuffer.splice(0, chunkSize);
-                    processAudio(chunk, sampleRate);
-                }
-            }
-        };
-
-        isRecording = true;
-
-        // Show hidden sections (they are now always visible)
-        document.getElementById('audioRecording').style.display = 'block';
-        document.getElementById('audioPlaceholder').style.display = 'none';
-        document.getElementById('waveform').style.display = 'block';
+        // Show UI sections
         document.getElementById('detection').style.display = 'block';
         document.getElementById('detectionPlaceholder').style.display = 'none';
         document.getElementById('dogLog').style.display = 'block';
 
-        // Start waveform animation
-        drawWaveform();
+        // Enable recording
+        isRecording = true;
+        audioTickCount = 0;
+        // Reset buffers
+        windowBuffer = new Float32Array(WINDOW_SIZE);
+        saveBuffer = new Float32Array(SAVE_BUFFER_SIZE);
+        saveIndex = 0;
+        bufferFilled = false;
+        windowPosition = 0;
+        predictionBuffer = [];
+        predictionCount = 0;
+        
+        startStopBtn.textContent = 'Stop Recording';
+        startStopBtn.classList.add('stop-btn');
+        
+        // Already logged above
 
     } catch (error) {
-        if (debugMode) {
-            debugLog('Error accessing microphone: ' + error.message);
-        }
-        console.error('Error accessing microphone: ' + error.message);
-        // Handle permission denied gracefully
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-            showToast('Microphone access denied. Please allow microphone access and try again.');
-            startStopBtn.disabled = false;
-            startStopBtn.classList.remove('loading');
-            startStopBtn.textContent = 'Request Permission & Start Recording';
-        } else {
-            // Reset button state on other errors
-            startStopBtn.disabled = false;
-            startStopBtn.classList.remove('loading');
-            startStopBtn.textContent = 'Start Recording';
-        }
+        log(`Recording error: ${error.message}`);
+        showToast(`Error: ${error.message}`);
     }
 }
 
 function stopRecording() {
-    if (processor) {
-        processor.disconnect();
-        processor = null;
-    }
-    if (analyser) {
-        analyser.disconnect();
-        analyser = null;
-    }
-    if (microphone) {
-        microphone.disconnect();
-        microphone = null;
-    }
+    log('Recording stopped');
+
     if (animationId) {
         cancelAnimationFrame(animationId);
         animationId = null;
     }
 
-    // Stop all media tracks to turn off browser recording indicator
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => {
-            track.stop();
-        });
-        mediaStream = null;
-    }
-
-    // Stop the audio context to fully release microphone
-    if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close().then(() => {
-            console.log('AudioContext closed successfully');
-            audioContext = null;
-        }).catch(err => {
-            console.error('Error closing AudioContext:', err);
-            audioContext = null;
-        });
-    }
-
     isRecording = false;
-    startStopBtn.disabled = false;
-    startStopBtn.classList.remove('loading');
     startStopBtn.classList.remove('stop-btn');
     startStopBtn.textContent = 'Start Recording';
 
-    // Keep sections visible except waveform
-    document.getElementById('waveform').style.display = 'none';
-    document.getElementById('audioPlaceholder').style.display = 'block';
+    // Keep sections visible
     document.getElementById('detectionPlaceholder').style.display = 'block';
 
-    // Clear canvas
-    canvasContext.fillStyle = '#f8f8f8';
-    canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Already logged above
 }
 
-async function processAudio(audioData, sampleRate) {
-    const timestamp = new Date().toLocaleTimeString();
-
-    audioChunkCounter++;
-    if (debugMode && audioChunkCounter % 3 === 0) { // Log every 3rd chunk
-        const rawAvg = audioData.reduce((sum, val) => sum + Math.abs(val), 0) / audioData.length;
-        const rawMax = Math.max(...audioData.map(Math.abs));
-        debugLog(`=== AUDIO CHUNK ${audioChunkCounter} ===`);
-        debugLog(`Raw captured audio: ${audioData.length} samples at ${sampleRate}Hz, avg=${rawAvg.toFixed(6)}, max=${rawMax.toFixed(6)}`);
-    }
-
-    // Resample to 16kHz if necessary
-    let resampledData = audioData;
-    if (sampleRate !== 16000) {
-        const ratio = 16000 / sampleRate;
-        const newLength = Math.floor(audioData.length * ratio);
-        resampledData = new Float32Array(newLength);
-        for (let i = 0; i < newLength; i++) {
-            const index = i / ratio;
-            const low = Math.floor(index);
-            const high = Math.min(low + 1, audioData.length - 1);
-            const weight = index - low;
-            resampledData[i] = audioData[low] * (1 - weight) + audioData[high] * weight;
-        }
-        if (debugMode && audioChunkCounter % 3 === 0) {
-            const resampledAvg = resampledData.reduce((sum, val) => sum + Math.abs(val), 0) / resampledData.length;
-            const resampledMax = Math.max(...resampledData.map(Math.abs));
-            debugLog(`After resampling: ${newLength} samples at 16kHz, avg=${resampledAvg.toFixed(6)}, max=${resampledMax.toFixed(6)}`);
-        }
-    }
-
-    // YAMNet expects exactly 16000 samples (1 second at 16kHz)
-    const yamnetInput = new Float32Array(16000);
-    const copyLength = Math.min(resampledData.length, 16000);
-    yamnetInput.set(resampledData.slice(0, copyLength));
-
-    // Apply normalization to counteract mobile audio processing differences
-    // Method 1: RMS normalization (preserve dynamics but normalize overall level)
-    const rms = Math.sqrt(yamnetInput.reduce((sum, val) => sum + val * val, 0) / yamnetInput.length);
-    const targetRMS = 0.1; // Target RMS level (adjustable)
-    if (rms > 0) {
-        const scale = targetRMS / rms;
-        for (let i = 0; i < yamnetInput.length; i++) {
-            yamnetInput[i] *= scale;
-        }
-    }
-
-    // Method 2: Remove DC offset more aggressively
-    const dcOffset = yamnetInput.reduce((sum, val) => sum + val, 0) / yamnetInput.length;
-    for (let i = 0; i < yamnetInput.length; i++) {
-        yamnetInput[i] -= dcOffset;
-    }
-
-    // Method 3: Apply a slight high-pass filter to remove low-frequency noise
-    const alpha = 0.95; // High-pass filter coefficient
-    let prevFiltered = 0;
-    for (let i = 0; i < yamnetInput.length; i++) {
-        const filtered = alpha * (prevFiltered + yamnetInput[i] - yamnetInput[i > 0 ? i - 1 : 0]);
-        yamnetInput[i] = filtered;
-        prevFiltered = filtered;
-    }
-
-    // Log YAMNet input characteristics after normalization
-    const yamnetAvg = yamnetInput.reduce((sum, val) => sum + Math.abs(val), 0) / yamnetInput.length;
-    const yamnetDc = yamnetInput.reduce((sum, val) => sum + val, 0) / yamnetInput.length;
-    const yamnetMax = Math.max(...yamnetInput.map(Math.abs));
-    const yamnetRMS = Math.sqrt(yamnetInput.reduce((sum, val) => sum + val * val, 0) / yamnetInput.length);
-    if (debugMode && audioChunkCounter % 3 === 0) {
-        debugLog(`After normalization: avg=${yamnetAvg.toFixed(6)}, max=${yamnetMax.toFixed(6)}, rms=${yamnetRMS.toFixed(6)}, dc=${yamnetDc.toFixed(6)}`);
-    }
-    console.log(`YAMNet input: avg amplitude=${yamnetAvg.toFixed(6)}, max amplitude=${yamnetMax.toFixed(6)}, dc offset=${yamnetDc.toFixed(6)}, copyLength=${copyLength}`);
-
+function processAudioChunk(audioData, sampleRate) {
     try {
-        // Use the yamnet.js wrapper's predict method (handles input shaping correctly)
-        const predictions = await model.predict(yamnetInput);
+        // Add data to window buffer (already resampled to 16kHz)
+        for (let i = 0; i < audioData.length; i++) {
+            if (windowPosition < WINDOW_SIZE) {
+                windowBuffer[windowPosition] = audioData[i];
+                windowPosition++;
+            } else {
+                // Window is full, shift by hop size and add new data
+                windowBuffer.copyWithin(0, HOP_SIZE);
+                windowPosition = WINDOW_SIZE - HOP_SIZE;
+                for (let j = 0; j < Math.min(HOP_SIZE, audioData.length - i); j++) {
+                    windowBuffer[windowPosition + j] = audioData[i + j];
+                }
+                windowPosition += Math.min(HOP_SIZE, audioData.length - i);
+                i += Math.min(HOP_SIZE, audioData.length - i) - 1;
+
+                // Only process every full window (every 0.96s), not every hop
+                // This ensures we process once per complete window, not every 0.48s
+                processYamnetWindow(windowBuffer.slice());
+                predictionCount++;
+            }
+        }
+
+    } catch (error) {
+        log(`ERROR Processing chunk: ${error.message}`);
+    }
+}
+
+function resampleAudio(audioData, fromRate, toRate) {
+    const ratio = toRate / fromRate;
+    const newLength = Math.floor(audioData.length * ratio);
+    const resampled = new Float32Array(newLength);
+
+    for (let i = 0; i < newLength; i++) {
+        const index = i / ratio;
+        const low = Math.floor(index);
+        const high = Math.min(low + 1, audioData.length - 1);
+        const weight = index - low;
+        resampled[i] = audioData[low] * (1 - weight) + audioData[high] * weight;
+    }
+
+    return resampled;
+}
+
+async function processYamnetWindow(yamnetInput) {
+    try {
+        // Amplitude normalization (remove DC offset and normalize)
+        const mean = yamnetInput.reduce((sum, val) => sum + val, 0) / yamnetInput.length;
+        const dcRemoved = yamnetInput.map(val => val - mean);
+        const maxAbs = Math.max(...dcRemoved.map(Math.abs));
+        const normalized = maxAbs > 0 ? dcRemoved.map(val => val / maxAbs) : dcRemoved;
+
+        // Run YAMNet inference
+        const yamnetTensor = tf.tensor(normalized, [WINDOW_SIZE], 'float32');
+        const predictions = await model.predict(yamnetTensor);
         const scores = await predictions.data();
 
-        // Find top 3 detected classes (limit to 521 classes as per YAMNet spec)
-        const topClasses = [];
-        const maxClasses = Math.min(scores.length, 521); // Ensure we don't exceed 521 classes
-        for (let i = 0; i < maxClasses; i++) {
-            topClasses.push({ index: i, score: scores[i], name: model.classNames[i] || `Class ${i}` });
-        }
-        topClasses.sort((a, b) => b.score - a.score);
+        yamnetTensor.dispose();
 
-        // Log top 5 classes
-        const top5Debug = topClasses.slice(0, 5).map(c => `${c.name}: ${(c.score * 100).toFixed(1)}%`).join(', ');
-        console.log(`Top 5 classes: ${top5Debug}`);
+        // Store predictions in buffer
+        predictionBuffer.push(scores);
 
-        // Check dog-related classes (dog, bark, yip, howl, bow-wow, growling, whimper, domestic animals pets)
-        const dogSoundClasses = [69, 70, 71, 72, 73, 74, 75, 237]; // Dog, Bark, Yip, Howl, Bow-wow, Growling, Whimper, Domestic animals pets
-        const dogSoundScores = dogSoundClasses.map(classIndex => ({
-            class: classIndex,
-            score: scores[classIndex],
-            name: model.classNames[classIndex] || `Class ${classIndex}`
-        }));
-
-        // Log dog sound scores
-        const dogScoresDebug = dogSoundScores.map(s => `${s.name}: ${(s.score * 100).toFixed(1)}%`).join(', ');
-        console.log(`Dog sound scores: ${dogScoresDebug}`);
-
-        if (debugMode && audioChunkCounter % 3 === 0) {
-            debugLog(`ML Results: Top classes - ${top5Debug}`);
-            debugLog(`ML Results: Dog sounds - ${dogScoresDebug}`);
-            debugLog(`ML Results: Inference completed successfully`);
-        }
-
-        // Separate specific and generic dog sounds
-        const specificClasses = [70, 71, 72, 73, 74, 75]; // Bark, Yip, Howl, Bow-wow, Growling, Whimper
-        const genericClasses = [69]; // Dog
-        const specificScores = dogSoundScores.filter(s => specificClasses.includes(s.class));
-        const genericScores = dogSoundScores.filter(s => genericClasses.includes(s.class));
-
-        // Prioritize specific dog vocalizations over generic classifications
-        let bestDogSound = null;
-        if (specificScores.length > 0) {
-            const bestSpecific = specificScores.reduce((best, current) =>
-                current.score > best.score ? current : best
-            );
-            if (bestSpecific.score > sensitivity) {
-                bestDogSound = bestSpecific;
+        // Check if we have 2 predictions (0.96s worth: 0.48s hop * 2 = 0.96s)
+        if (predictionBuffer.length >= 2) {
+            // Combine predictions by averaging
+            const combinedScores = new Float32Array(scores.length);
+            for (let i = 0; i < scores.length; i++) {
+                combinedScores[i] = predictionBuffer.reduce((sum, pred) => sum + pred[i], 0) / predictionBuffer.length;
             }
-        }
-        if (!bestDogSound && genericScores.length > 0) {
-            const bestGeneric = genericScores.reduce((best, current) =>
-                current.score > best.score ? current : best
-            );
-            if (bestGeneric.score > sensitivity) {
-                bestDogSound = bestGeneric;
+
+            // Get top 5 classes for display from combined scores
+            const topClasses = [];
+            for (let i = 0; i < Math.min(combinedScores.length, 521); i++) {
+                topClasses.push({
+                    index: i,
+                    score: combinedScores[i],
+                    name: model.classNames[i] || `Class ${i}`
+                });
             }
-        }
+            topClasses.sort((a, b) => b.score - a.score);
 
-        // Update detection list with top classes
-        updateDetectionList(topClasses);
+            // Update UI with top detections
+            updateDetectionList(topClasses);
 
-        // Show what the model is detecting
-        const top3 = topClasses.slice(0, 3);
-        const detectionInfo = top3.map(c => `${c.name}: ${(c.score * 100).toFixed(1)}%`).join(', ');
+            // Log all YAMNet predictions for debugging
+            const allPredictions = Array.from(combinedScores)
+                .map((score, index) => ({ score, index }))
+                .filter(item => item.score > 0.01)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 10) // Top 10 predictions
+                .map(item => `${model.classNames[item.index]} (${(item.score * 100).toFixed(1)}%)`)
+                .join(', ');
+            log(`YAMNet: ${allPredictions}`);
 
-        // Use sensitivity slider value for dog-related sound detection threshold
-        // Collect all dog-related sounds above sensitivity threshold
-        const detectedDogSounds = dogSoundScores.filter(sound => sound.score > sensitivity);
+            // Check for dog sounds using combined scores (classes: Animal=67, Domestic animals=68, Dog=69, Bark=70, Yip=71, Howl=72, Bow-wow=73, Growling=74, Whimper=75, Canidae=117)
+            const dogClasses = [67, 68, 69, 70, 71, 72, 73, 74, 75, 117]; // Animal, Domestic animals, Dog, Bark, Yip, Howl, Bow-wow, Growling, Whimper, Canidae
+            const detectedDogs = dogClasses
+                .filter(classIdx => combinedScores[classIdx] > sensitivity)
+                .map(classIdx => ({
+                    name: model.classNames[classIdx],
+                    score: combinedScores[classIdx]
+                }));
 
-        if (detectedDogSounds.length > 0) {
-            const now = Date.now();
-            if (now - lastDetectionTime >= 4000) { // 4 second debounce
-                // Format all detected sounds as comma-delimited list: "class (percentage), class (percentage), ..."
-                const soundList = detectedDogSounds
-                    .map(sound => `${sound.name} (${(sound.score * 100).toFixed(1)}%)`)
-                    .join(', ');
+            // Check for specific dog sounds (excluding general Animal and Domestic animals classes)
+            const specificDogClasses = [69, 70, 71, 72, 73, 74, 75, 117]; // Dog, Bark, Yip, Howl, Bow-wow, Growling, Whimper, Canidae
+            const hasSpecificDogSound = specificDogClasses.some(classIdx => combinedScores[classIdx] > 0.01); // >1%
 
-                if (debugMode && audioChunkCounter % 3 === 0) {
-                    debugLog(`DETECTION: Dog sounds detected - ${soundList}`);
+            // Check for general animal classes above sensitivity threshold
+            const hasGeneralAnimalClass = (combinedScores[67] > sensitivity) || (combinedScores[68] > sensitivity); // Animal or Domestic animals
+
+            // Check for dog detection: must have specific dog sound >1% AND (specific dog class above threshold OR general animal class above threshold)
+            const shouldDetectDog = hasSpecificDogSound && (detectedDogs.length > 0 || hasGeneralAnimalClass);
+
+            if (shouldDetectDog) {
+                const currentTime = Date.now() / 1000; // Current time in seconds
+                const timeSinceLastLog = currentTime - lastLoggedDetectionTime;
+
+                // Get all dog-related classes above 1% threshold for logging
+                const allDogClasses = [67, 68, 69, 70, 71, 72, 73, 74, 75, 117]; // Animal, Domestic animals, Dog, Bark, Yip, Howl, Bow-wow, Growling, Whimper, Canidae
+                let relevantClasses = allDogClasses
+                    .filter(classIdx => combinedScores[classIdx] > 0.01) // Show classes above 1% threshold
+                    .map(classIdx => ({
+                        name: model.classNames[classIdx],
+                        score: combinedScores[classIdx]
+                    }))
+                    .sort((a, b) => b.score - a.score); // Sort by confidence descending
+
+                const soundList = relevantClasses.map(item => `${item.name} (${(item.score * 100).toFixed(1)}%)`).join(', ');
+
+                if (timeSinceLastLog >= 4) {
+                    // Log to console and add to dog log
+                    log(`Detection: ${soundList}`);
+                    showToast('Detection logged!');
+
+                    // Capture full 2-second buffer around detection
+                    const capturedAudio = new Float32Array(SAVE_BUFFER_SIZE);
+                    if (bufferFilled) {
+                        // Buffer has wrapped around - get the most recent 2 seconds
+                        const startIdx = saveIndex;
+                        for (let i = 0; i < SAVE_BUFFER_SIZE; i++) {
+                            capturedAudio[i] = saveBuffer[(startIdx + i) % SAVE_BUFFER_SIZE];
+                        }
+                    } else {
+                        // Buffer hasn't wrapped yet - pad with zeros if needed
+                        capturedAudio.set(saveBuffer.slice(0, saveIndex));
+                        // Pad the rest with zeros to make it 2 seconds
+                        for (let i = saveIndex; i < SAVE_BUFFER_SIZE; i++) {
+                            capturedAudio[i] = 0;
+                        }
+                    }
+
+                    const timestamp = new Date().toLocaleTimeString();
+                    addToDogLog(timestamp, soundList, '', capturedAudio, 16000);
+                    lastLoggedDetectionTime = currentTime;
+                } else {
+                    // Log to console with cooldown message, but don't add to dog log
+                    log(`Detection Within 4 Second Cooldown: ${soundList}`);
                 }
-                console.log(`Dog detection triggered: ${soundList}`);
-                showToast('🐕 Dog detected!');
-                addToDogLog(timestamp, soundList, '', new Float32Array(audioData), sampleRate);
-                lastDetectionTime = now;
             }
-        } else {
-            if (debugMode && audioChunkCounter % 3 === 0) {
-                debugLog('DETECTION: No dog sounds detected above threshold');
-            }
-            console.log('No dog sounds detected above threshold');
+
+            // Clear buffer for next 0.96s period
+            predictionBuffer = [];
         }
 
         predictions.dispose();
 
     } catch (error) {
-        if (debugMode && audioChunkCounter % 3 === 0) {
-            debugLog(`ERROR: Inference failed: ${error.message}`);
-        }
-        console.error(`ERROR: Inference failed: ${error.message}`);
+        log(`ERROR Processing YAMNet: ${error.message}`);
     }
 }
 
-function drawWaveform() {
-    if (!isRecording) return;
-
-    animationId = requestAnimationFrame(drawWaveform);
-
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    analyser.getByteTimeDomainData(dataArray);
-
-    // Clear canvas
-    canvasContext.fillStyle = '#f8f8f8';
-    canvasContext.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw waveform
-    canvasContext.lineWidth = 2;
-    canvasContext.strokeStyle = '#007bff';
-    canvasContext.beginPath();
-
-    const sliceWidth = canvas.width / bufferLength;
-    let x = 0;
-
-    for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = v * canvas.height / 2;
-
-        if (i === 0) {
-            canvasContext.moveTo(x, y);
-        } else {
-            canvasContext.lineTo(x, y);
-        }
-
-        x += sliceWidth;
-    }
-
-    canvasContext.lineTo(canvas.width, canvas.height / 2);
-    canvasContext.stroke();
-}
 
 function updateSensitivity() {
     sensitivity = parseFloat(sensitivitySlider.value);
@@ -488,9 +457,16 @@ function updateDetectionList(topClasses) {
         });
     } else {
         // Show actual detection results when recording
+        const dogClasses = [67, 68, 69, 70, 71, 72, 73, 74, 75, 117]; // Animal, Domestic animals, Dog, Bark, Yip, Howl, Bow-wow, Growling, Whimper, Canidae
         topClasses.slice(0, 5).forEach((classInfo, index) => {
             const detectionItem = document.createElement('div');
             detectionItem.className = 'detection-item';
+            // Check if this is a dog-related class and above tolerance (sensitivity threshold)
+            if (dogClasses.includes(classInfo.index) && classInfo.score > sensitivity) {
+                detectionItem.classList.add('above-tolerance');
+            } else if (dogClasses.includes(classInfo.index) && classInfo.score > 0.01) {
+                detectionItem.classList.add('below-tolerance');
+            }
             detectionItem.innerHTML = `
                 <span class="class-name">${index + 1}. ${classInfo.name}</span>
                 <span class="confidence">${(classInfo.score * 100).toFixed(1)}%</span>
@@ -541,6 +517,7 @@ function addToDogLog(timestamp, soundName, confidence, audioData, sampleRate) {
     const year = now.getFullYear();
     const hours = now.getHours();
     const minutes = now.getMinutes().toString().padStart(2, '0');
+    const seconds = now.getSeconds().toString().padStart(2, '0');
     const ampm = hours >= 12 ? 'pm' : 'am';
     const displayHours = hours % 12 || 12;
 
@@ -555,7 +532,7 @@ function addToDogLog(timestamp, soundName, confidence, audioData, sampleRate) {
         }
     };
 
-    const formattedTimestamp = `${day}${getOrdinalSuffix(day)} ${month} ${year}, ${displayHours}:${minutes}${ampm}`;
+    const formattedTimestamp = `${day}${getOrdinalSuffix(day)} ${month} ${year}, ${displayHours}:${minutes}:${seconds}${ampm}`;
 
     const playButton = document.createElement('button');
     playButton.innerHTML = '▶';
@@ -583,8 +560,20 @@ function addToDogLog(timestamp, soundName, confidence, audioData, sampleRate) {
     deleteCell.appendChild(deleteButton);
     row.appendChild(deleteCell);
 
+    // Store audio data on the row for saving
+    row.audioData = audioData;
+    row.sampleRate = sampleRate;
+    row.soundName = soundName;
+    row.timestamp = formattedTimestamp;
+
     dogLogBody.appendChild(row);
 }
+
+function log(message) {
+    console.log(`[DogBarkDetector] ${message}`);
+}
+
+
 
 function showToast(message) {
     const toast = document.getElementById('toast');
@@ -603,27 +592,16 @@ function showToast(message) {
     }, 1500);
 }
 
-function debugLog(message) {
-    if (!debugMode || !debugLogElement) return;
 
-    const logEntry = document.createElement('div');
-    const timestamp = new Date().toLocaleTimeString();
-    logEntry.textContent = `[${timestamp}] ${message}`;
-    debugLogElement.appendChild(logEntry);
-
-    // Auto-scroll to bottom
-    debugLogElement.scrollTop = debugLogElement.scrollHeight;
-}
 
 
 
 
 async function playAudio(audioData, sampleRate) {
     try {
-        // Convert Float32Array to 16-bit PCM for WAV format
+        // Convert Float32Array to 16-bit PCM
         const pcmData = new Int16Array(audioData.length);
         for (let i = 0; i < audioData.length; i++) {
-            // Convert from -1.0 to 1.0 range to -32768 to 32767
             pcmData[i] = Math.max(-32768, Math.min(32767, audioData[i] * 32768));
         }
 
@@ -640,7 +618,7 @@ async function playAudio(audioData, sampleRate) {
             audio.play().then(() => {
                 // Playback started successfully
             }).catch(err => {
-                console.error('Error starting audio playback: ' + err.message);
+                log(`ERROR: Audio playback failed - ${err.message}`);
             });
         };
 
@@ -649,12 +627,63 @@ async function playAudio(audioData, sampleRate) {
         };
 
         audio.onerror = (error) => {
-            console.error('Audio element error: ' + error.message);
+            log(`ERROR: Audio element error - ${error.message || 'Unknown error'}`);
             URL.revokeObjectURL(audioUrl);
         };
     } catch (error) {
-        console.error('Error creating audio: ' + error.message);
+        log(`ERROR: Creating audio failed - ${error.message}`);
     }
+}
+
+function audioDataToWAV(audioData, sampleRate) {
+    // Convert Float32Array to 16-bit PCM
+    const pcmData = new Int16Array(audioData.length);
+    for (let i = 0; i < audioData.length; i++) {
+        pcmData[i] = Math.max(-32768, Math.min(32767, audioData[i] * 32768));
+    }
+    return createWAVBuffer(pcmData, sampleRate);
+}
+
+function wavToAudioData(wavBuffer, targetSampleRate) {
+    // Parse WAV header
+    const view = new DataView(wavBuffer.buffer || wavBuffer);
+    const sampleRate = view.getUint32(24, true);
+    const numChannels = view.getUint16(22, true);
+    const bitsPerSample = view.getUint16(34, true);
+
+    // Find data chunk
+    let dataOffset = 44; // Default WAV header size
+    if (view.getUint32(36, true) === 0x64617461) { // 'data'
+        dataOffset = 44;
+    }
+
+    // Extract PCM data
+    const dataSize = view.getUint32(40, true);
+    const numSamples = dataSize / (bitsPerSample / 8) / numChannels;
+    const pcmData = new Int16Array(wavBuffer, dataOffset, numSamples);
+
+    // Convert to Float32Array
+    const audioData = new Float32Array(pcmData.length);
+    for (let i = 0; i < pcmData.length; i++) {
+        audioData[i] = pcmData[i] / 32768.0;
+    }
+
+    // Resample if needed
+    if (sampleRate !== targetSampleRate) {
+        const ratio = targetSampleRate / sampleRate;
+        const newLength = Math.floor(audioData.length * ratio);
+        const resampledData = new Float32Array(newLength);
+        for (let i = 0; i < newLength; i++) {
+            const index = i / ratio;
+            const low = Math.floor(index);
+            const high = Math.min(low + 1, audioData.length - 1);
+            const weight = index - low;
+            resampledData[i] = audioData[low] * (1 - weight) + audioData[high] * weight;
+        }
+        return resampledData;
+    }
+
+    return audioData;
 }
 
 function createWAVBuffer(pcmData, sampleRate) {
@@ -706,6 +735,130 @@ function createWAVBuffer(pcmData, sampleRate) {
     return wavBuffer;
 }
 
+function saveAsHtml() {
+    const rows = dogLogBody.querySelectorAll('tr:not(.placeholder-row)');
+    if (rows.length === 0) {
+        showToast('No dog log entries to save');
+        return;
+    }
+
+    let htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dog Barking Log - ${new Date().toLocaleDateString()}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        button { padding: 5px 10px; margin: 2px; cursor: pointer; }
+        .play-btn { background-color: #007bff; color: white; border: none; border-radius: 3px; }
+        .delete-btn { background-color: #dc3545; color: white; border: none; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Dog Barking Log - ${new Date().toLocaleDateString()}</h1>
+    <p>Generated on ${new Date().toLocaleString()}</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Sound Recorded</th>
+                <th>Play</th>
+            </tr>
+        </thead>
+        <tbody>
+`;
+
+    rows.forEach((row, index) => {
+        if (row.audioData && row.sampleRate) {
+            // Convert audio data to base64 WAV
+            const pcmData = new Int16Array(row.audioData.length);
+            for (let i = 0; i < row.audioData.length; i++) {
+                pcmData[i] = Math.max(-32768, Math.min(32767, row.audioData[i] * 32768));
+            }
+            const wavBuffer = createWAVBuffer(pcmData, row.sampleRate);
+            const base64Wav = btoa(String.fromCharCode(...wavBuffer));
+
+            htmlContent += `
+            <tr>
+                <td>${row.timestamp}</td>
+                <td>${row.soundName}</td>
+                <td><button class="play-btn" onclick="playAudio('data:audio/wav;base64,${base64Wav}')">▶</button></td>
+            </tr>
+`;
+        }
+    });
+
+    htmlContent += `
+        </tbody>
+    </table>
+    <div style="margin-top: 30px; padding: 15px; background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; text-align: center; font-size: 14px; color: #666;">
+        Generated with <a href="https://dogbarkingdetector.com" target="_blank" style="color: #007bff; text-decoration: none;">dogbarkingdetector.com</a>
+    </div>
+    <script>
+        function playAudio(dataUrl) {
+            const audio = new Audio(dataUrl);
+            audio.play().catch(err => console.error('Playback error:', err));
+        }
+    </script>
+</body>
+</html>
+`;
+
+    // Create and download the HTML file
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dog-log-${new Date().toISOString().split('T')[0]}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast('Dog log saved as HTML file');
+}
+
+function saveAsCsv() {
+    const rows = dogLogBody.querySelectorAll('tr:not(.placeholder-row)');
+    if (rows.length === 0) {
+        showToast('No dog log entries to save');
+        return;
+    }
+
+    let csvContent = 'Timestamp,Sound Recorded\n';
+
+    rows.forEach((row) => {
+        if (row.timestamp && row.soundName) {
+            // Escape commas and quotes in CSV
+            const escapedTimestamp = row.timestamp.replace(/"/g, '""');
+            const escapedSoundName = row.soundName.replace(/"/g, '""');
+            csvContent += `"${escapedTimestamp}","${escapedSoundName}"\n`;
+        }
+    });
+
+    // Add footer
+    csvContent += '\n"Generated with dogbarkingdetector.com","https://dogbarkingdetector.com"';
+
+    // Create and download the CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dog-log-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast('Dog log saved as CSV file');
+}
+
 
 
 // Initialize on load
@@ -723,4 +876,30 @@ for (let i = 0; i < accordions.length; i++) {
         }
     });
 }
+
+// Collapsible section functionality
+let isCollapsed = false;
+const collapsibleTab = document.getElementById('collapsibleTab');
+const collapsibleLine = document.getElementById('collapsibleLine');
+const infoColumns = document.querySelector('.info-columns');
+
+if (collapsibleTab && infoColumns) {
+    collapsibleTab.addEventListener('click', function() {
+        isCollapsed = !isCollapsed;
+        const tabText = this.querySelector('.tab-text');
+
+        if (isCollapsed) {
+            // Hide the columns
+            infoColumns.classList.add('collapsed');
+            collapsibleLine.classList.add('collapsed');
+            tabText.textContent = 'show ▼';
+        } else {
+            // Show the columns
+            infoColumns.classList.remove('collapsed');
+            collapsibleLine.classList.remove('collapsed');
+            tabText.textContent = 'hide ▲';
+        }
+    });
+}
+
 window.addEventListener('load', init);

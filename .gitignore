@@ -37,6 +37,9 @@ package-lock.json
 .clinerules
 
 # Build and deployment files
-package.json
 version.json
 deploy-prep.js
+
+# SSL certificates
+*.crt
+*.key

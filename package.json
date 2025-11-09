@@ -1,0 +1,13 @@
+{
+  "name": "dogbarkingdetector",
+  "version": "1.0.0",
+  "description": "Dog barking detector web app deployed to GitHub Pages",
+  "homepage": "https://jatacid.github.io/dogbarkingdetector",
+  "scripts": {
+    "dev": "npx http-server docs -p 8080 --host 0.0.0.0 --ssl --cert cert.crt --key cert.key",
+    "upload": "node deploy-prep.js"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
