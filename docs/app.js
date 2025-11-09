@@ -18,6 +18,7 @@ let mediaStream = null;
 let saveAsHtmlBtn;
 let saveAsCsvBtn;
 let audioTickCount = 0;
+let wakeAudioSource = null;
 const WINDOW_SIZE = 15360; // 0.96s at 16kHz
 const HOP_SIZE = 7680; // 0.48s at 16kHz
 const SAVE_BUFFER_SIZE = 32000; // 2s at 16kHz for full bark capture
@@ -225,10 +226,13 @@ async function startRecording() {
         windowPosition = 0;
         predictionBuffer = [];
         predictionCount = 0;
-        
+
+        // Start silent audio loop to prevent device sleep
+        startWakeAudio();
+
         startStopBtn.textContent = 'Stop Recording';
         startStopBtn.classList.add('stop-btn');
-        
+
         // Already logged above
 
     } catch (error) {
@@ -252,7 +256,9 @@ function stopRecording() {
     // Keep sections visible
     document.getElementById('detectionPlaceholder').style.display = 'block';
 
-    
+    // Stop silent audio loop
+    stopWakeAudio();
+
     // Already logged above
 }
 
@@ -571,6 +577,45 @@ function addToDogLog(timestamp, soundName, confidence, audioData, sampleRate) {
 
 function log(message) {
     console.log(`[DogBarkDetector] ${message}`);
+}
+
+function startWakeAudio() {
+    try {
+        // Create a silent audio buffer
+        const bufferSize = audioContext.sampleRate * 2; // 2 seconds of audio
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // Fill with silence (very low amplitude noise to prevent optimization)
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 0.0001; // Very quiet noise
+        }
+
+        // Create source and connect to destination
+        wakeAudioSource = audioContext.createBufferSource();
+        wakeAudioSource.buffer = buffer;
+        wakeAudioSource.loop = true;
+        wakeAudioSource.connect(audioContext.destination);
+
+        // Start playing
+        wakeAudioSource.start();
+        log('Wake audio started');
+    } catch (error) {
+        log(`ERROR: Failed to start wake audio - ${error.message}`);
+    }
+}
+
+function stopWakeAudio() {
+    try {
+        if (wakeAudioSource) {
+            wakeAudioSource.stop();
+            wakeAudioSource.disconnect();
+            wakeAudioSource = null;
+            log('Wake audio stopped');
+        }
+    } catch (error) {
+        log(`ERROR: Failed to stop wake audio - ${error.message}`);
+    }
 }
 
 
