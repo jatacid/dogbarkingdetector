@@ -19,6 +19,7 @@ let saveAsHtmlBtn;
 let saveAsCsvBtn;
 let audioTickCount = 0;
 let wakeAudioSource = null;
+let currentAudioElement = null; // Track currently playing audio
 const WINDOW_SIZE = 15360; // 0.96s at 16kHz
 const HOP_SIZE = 7680; // 0.48s at 16kHz
 const SAVE_BUFFER_SIZE = 32000; // 2s at 16kHz for full bark capture
@@ -644,6 +645,13 @@ function showToast(message) {
 
 async function playAudio(audioData, sampleRate) {
     try {
+        // Stop currently playing audio if any
+        if (currentAudioElement) {
+            currentAudioElement.pause();
+            currentAudioElement.currentTime = 0;
+            currentAudioElement = null;
+        }
+
         // Convert Float32Array to 16-bit PCM
         const pcmData = new Int16Array(audioData.length);
         for (let i = 0; i < audioData.length; i++) {
@@ -658,6 +666,7 @@ async function playAudio(audioData, sampleRate) {
         // Use HTML5 Audio element for playback
         const audio = new Audio(audioUrl);
         audio.volume = 1.0;
+        currentAudioElement = audio; // Store reference to currently playing audio
 
         audio.oncanplay = () => {
             audio.play().then(() => {
@@ -669,11 +678,17 @@ async function playAudio(audioData, sampleRate) {
 
         audio.onended = () => {
             URL.revokeObjectURL(audioUrl); // Clean up the blob URL
+            if (currentAudioElement === audio) {
+                currentAudioElement = null;
+            }
         };
 
         audio.onerror = (error) => {
             log(`ERROR: Audio element error - ${error.message || 'Unknown error'}`);
             URL.revokeObjectURL(audioUrl);
+            if (currentAudioElement === audio) {
+                currentAudioElement = null;
+            }
         };
     } catch (error) {
         log(`ERROR: Creating audio failed - ${error.message}`);
