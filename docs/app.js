@@ -18,6 +18,8 @@ let mediaStream = null;
 let saveAsHtmlBtn;
 let saveAsCsvBtn;
 let shareBtn;
+let hasShared = false;
+let lastShareUrl = '';
 let audioTickCount = 0;
 let wakeAudioSource = null;
 let wakeLock = null;
@@ -55,7 +57,7 @@ async function init() {
     sensitivitySlider.addEventListener('input', updateSensitivity);
     saveAsHtmlBtn.addEventListener('click', saveAsHtml);
     saveAsCsvBtn.addEventListener('click', saveAsCsv);
-    shareBtn.addEventListener('click', showShareConfirmModal);
+    shareBtn.addEventListener('click', handleShareClick);
 
     // Add placeholder entries to dog log immediately
     addPlaceholderEntries();
@@ -979,6 +981,17 @@ if (collapsibleTab && infoColumns) {
     });
 }
 
+function handleShareClick() {
+    if (hasShared && lastShareUrl) {
+        // User has already shared, show the result modal directly
+        document.getElementById('shareLinkInput').value = lastShareUrl;
+        document.getElementById('shareResultModal').style.display = 'flex';
+    } else {
+        // First time sharing, show confirmation modal
+        showShareConfirmModal();
+    }
+}
+
 function showShareConfirmModal() {
     const blob = generateHtmlBlob();
     if (!blob) {
@@ -1032,7 +1045,11 @@ async function shareLog() {
             throw new Error(`Upload failed: ${response.status}`);
         }
 
-        const shareUrl = `${window.location.origin}/log/${shortId}`;
+        const shareUrl = `${window.location.host}/log/${shortId}`;
+
+        // Store share state
+        hasShared = true;
+        lastShareUrl = shareUrl;
 
         // Show result modal
         document.getElementById('shareLinkInput').value = shareUrl;
@@ -1048,15 +1065,23 @@ async function shareLog() {
 
 function copyShareLink() {
     const input = document.getElementById('shareLinkInput');
+    const urlWithProtocol = 'https://' + input.value;
     input.select();
     input.setSelectionRange(0, 99999); // For mobile devices
 
     try {
+        // Use the URL with protocol for copying
+        const tempInput = document.createElement('input');
+        tempInput.value = urlWithProtocol;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        tempInput.setSelectionRange(0, 99999);
         document.execCommand('copy');
+        document.body.removeChild(tempInput);
         showToast('Link copied to clipboard!');
     } catch (error) {
         // Fallback for browsers that don't support execCommand
-        navigator.clipboard.writeText(input.value).then(() => {
+        navigator.clipboard.writeText(urlWithProtocol).then(() => {
             showToast('Link copied to clipboard!');
         }).catch(() => {
             showToast('Failed to copy link');
@@ -1068,7 +1093,8 @@ function openShareLink() {
     const input = document.getElementById('shareLinkInput');
     const url = input.value;
     if (url) {
-        window.open(url, '_blank');
+        const fullUrl = 'https://' + url;
+        window.open(fullUrl, '_blank');
     }
 }
 

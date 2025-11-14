@@ -4,7 +4,7 @@
   "description": "Dog barking detector web app deployed to GitHub Pages",
   "homepage": "https://jatacid.github.io/dogbarkingdetector",
   "scripts": {
-    "dev": "npx http-server docs -p 8080 --host 0.0.0.0 --ssl --cert cert.crt --key cert.key",
+    "dev": "node server.js",
     "upload": "node deploy-prep.js"
   },
   "devDependencies": {

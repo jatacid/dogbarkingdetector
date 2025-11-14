@@ -39,6 +39,7 @@ package-lock.json
 # Build and deployment files
 version.json
 deploy-prep.js
+server.js
 
 # SSL certificates
 *.crt
