@@ -1015,8 +1015,10 @@ async function shareLog() {
     try {
         showToast('Uploading log...');
 
-        const uniqueId = crypto.randomUUID();
-        const filename = `barklog-${uniqueId}.html`;
+        const array = new Uint8Array(4);
+        crypto.getRandomValues(array);
+        const shortId = Array.from(array, byte => byte.toString(36)).join('').substring(0, 5);
+        const filename = `${shortId}.html`;
 
         const form = new FormData();
         form.append('file', blob, filename);
@@ -1030,7 +1032,7 @@ async function shareLog() {
             throw new Error(`Upload failed: ${response.status}`);
         }
 
-        const shareUrl = `${window.location.origin}/log/${filename}`;
+        const shareUrl = `${window.location.origin}/log/${shortId}`;
 
         // Show result modal
         document.getElementById('shareLinkInput').value = shareUrl;
@@ -1062,16 +1064,26 @@ function copyShareLink() {
     }
 }
 
+function openShareLink() {
+    const input = document.getElementById('shareLinkInput');
+    const url = input.value;
+    if (url) {
+        window.open(url, '_blank');
+    }
+}
+
 function initModalListeners() {
     const shareCancelBtn = document.getElementById('shareCancelBtn');
     const shareConfirmBtn = document.getElementById('shareConfirmBtn');
     const shareCloseBtn = document.getElementById('shareCloseBtn');
     const copyLinkBtn = document.getElementById('copyLinkBtn');
+    const openLinkBtn = document.getElementById('openLinkBtn');
 
     if (shareCancelBtn) shareCancelBtn.addEventListener('click', hideShareConfirmModal);
     if (shareConfirmBtn) shareConfirmBtn.addEventListener('click', shareLog);
     if (shareCloseBtn) shareCloseBtn.addEventListener('click', hideShareResultModal);
     if (copyLinkBtn) copyLinkBtn.addEventListener('click', copyShareLink);
+    if (openLinkBtn) openLinkBtn.addEventListener('click', openShareLink);
 
     // Close modals when clicking outside
     const confirmModal = document.getElementById('shareConfirmModal');
