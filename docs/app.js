@@ -18,6 +18,7 @@ let mediaStream = null;
 let saveAsHtmlBtn;
 let saveAsCsvBtn;
 let shareBtn;
+let micHelpText;
 let hasShared = false;
 let lastShareUrl = '';
 let audioTickCount = 0;
@@ -51,6 +52,7 @@ async function init() {
     saveAsHtmlBtn = document.getElementById('saveAsHtmlBtn');
     saveAsCsvBtn = document.getElementById('saveAsCsvBtn');
     shareBtn = document.getElementById('shareBtn');
+    micHelpText = document.getElementById('micHelpText');
 
     loadBtn.addEventListener('click', loadModels);
     startStopBtn.addEventListener('click', toggleRecording);
@@ -74,6 +76,7 @@ async function loadModels() {
         loadBtn.disabled = true;
         loadBtn.classList.add('loading');
         loadBtn.querySelector('.button-text').textContent = 'Initializing...';
+        micHelpText.style.display = 'none';
         updateProgressBar(10);
 
         log('Initializing...');
@@ -83,9 +86,11 @@ async function loadModels() {
         await tf.ready();
         log('WASM backend ready');
         loadBtn.querySelector('.button-text').textContent = 'Setting up TensorFlow...';
+        micHelpText.style.display = 'none';
         updateProgressBar(25);
 
         loadBtn.querySelector('.button-text').textContent = 'Loading YAMNet model...';
+        micHelpText.style.display = 'none';
         updateProgressBar(40);
         model = await yamnet.load('./model/', {
             requestInit: {
@@ -97,6 +102,7 @@ async function loadModels() {
 
         // Request microphone access with simplified constraints
         loadBtn.querySelector('.button-text').textContent = 'Requesting microphone access...';
+        micHelpText.style.display = 'block';
         updateProgressBar(70);
         const constraints = {
             audio: {
@@ -111,6 +117,7 @@ async function loadModels() {
         mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
         log('Microphone ready');
         loadBtn.querySelector('.button-text').textContent = 'Setting up audio processing...';
+        micHelpText.style.display = 'none';
         updateProgressBar(80);
 
         // Create AudioContext
@@ -158,6 +165,7 @@ async function loadModels() {
         };
 
         loadBtn.querySelector('.button-text').textContent = 'Warming up model...';
+        micHelpText.style.display = 'none';
         updateProgressBar(90);
         // Warm up YAMNet inference engine with a test prediction
         const testBuffer = new Float32Array(16000).fill(0);
@@ -168,6 +176,7 @@ async function loadModels() {
         isLoaded = true;
         loadBtn.classList.remove('loading');
         loadBtn.querySelector('.button-text').textContent = 'Loaded ✓';
+        micHelpText.style.display = 'none';
         loadBtn.disabled = true;
         startStopBtn.disabled = false;
         updateProgressBar(100);
@@ -193,6 +202,7 @@ async function loadModels() {
         loadBtn.disabled = false;
         loadBtn.classList.remove('loading');
         loadBtn.querySelector('.button-text').textContent = 'Load Models & Setup Mic';
+        micHelpText.style.display = 'none';
         updateProgressBar(0);
 
         // Reset progress bar on error

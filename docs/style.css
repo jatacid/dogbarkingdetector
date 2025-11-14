@@ -419,6 +419,7 @@ button.loading::after {
     box-shadow: 0 4px 12px rgba(0, 48, 135, 0.15);
     transition: all 0.3s ease;
     position: relative;
+    width:100%;
     overflow: hidden;
 }
 
@@ -468,6 +469,39 @@ button.loading::after {
 .paypal-logo {
     height: 38px;
     width: auto;
+}
+
+.sponsor-card {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin: 10px 0;
+    background: #f9f9f9;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+}
+
+.sponsor-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sponsor-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.sponsor-card:hover::before {
+    left: 100%;
 }
 
 .info-columns {
