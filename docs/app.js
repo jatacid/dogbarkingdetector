@@ -17,8 +17,10 @@ let lastLoggedDetectionTime = 0;
 let mediaStream = null;
 let saveAsHtmlBtn;
 let saveAsCsvBtn;
+let shareBtn;
 let audioTickCount = 0;
 let wakeAudioSource = null;
+let wakeLock = null;
 const WINDOW_SIZE = 15360; // 0.96s at 16kHz
 const HOP_SIZE = 7680; // 0.48s at 16kHz
 const SAVE_BUFFER_SIZE = 32000; // 2s at 16kHz for full bark capture
@@ -46,18 +48,23 @@ async function init() {
     dogLogBody = document.getElementById('dogLogBody');
     saveAsHtmlBtn = document.getElementById('saveAsHtmlBtn');
     saveAsCsvBtn = document.getElementById('saveAsCsvBtn');
+    shareBtn = document.getElementById('shareBtn');
 
     loadBtn.addEventListener('click', loadModels);
     startStopBtn.addEventListener('click', toggleRecording);
     sensitivitySlider.addEventListener('input', updateSensitivity);
     saveAsHtmlBtn.addEventListener('click', saveAsHtml);
     saveAsCsvBtn.addEventListener('click', saveAsCsv);
+    shareBtn.addEventListener('click', showShareConfirmModal);
 
     // Add placeholder entries to dog log immediately
     addPlaceholderEntries();
 
     // Initialize detection list with placeholder values
     updateDetectionList([]);
+
+    // Initialize modal event listeners
+    initModalListeners();
 }
 
 async function loadModels() {
@@ -227,8 +234,16 @@ async function startRecording() {
         predictionBuffer = [];
         predictionCount = 0;
 
-        // Start silent audio loop to prevent device sleep
-        startWakeAudio();
+        // Request wake lock to prevent device sleep, fallback to silent audio
+        if ('wakeLock' in navigator) {
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+            } catch (error) {
+                startWakeAudio();
+            }
+        } else {
+            startWakeAudio();
+        }
 
         startStopBtn.textContent = 'Stop Recording';
         startStopBtn.classList.add('stop-btn');
@@ -256,8 +271,17 @@ function stopRecording() {
     // Keep sections visible
     document.getElementById('detectionPlaceholder').style.display = 'block';
 
-    // Stop silent audio loop
-    stopWakeAudio();
+    // Release wake lock or stop silent audio loop
+    if (wakeLock) {
+        try {
+            wakeLock.release();
+            wakeLock = null;
+        } catch (error) {
+            // Ignore release errors
+        }
+    } else {
+        stopWakeAudio();
+    }
 
     // Already logged above
 }
@@ -780,11 +804,10 @@ function createWAVBuffer(pcmData, sampleRate) {
     return wavBuffer;
 }
 
-function saveAsHtml() {
+function generateHtmlBlob() {
     const rows = dogLogBody.querySelectorAll('tr:not(.placeholder-row)');
     if (rows.length === 0) {
-        showToast('No dog log entries to save');
-        return;
+        return null;
     }
 
     let htmlContent = `
@@ -855,8 +878,17 @@ function saveAsHtml() {
 </html>
 `;
 
+    return new Blob([htmlContent], { type: 'text/html' });
+}
+
+function saveAsHtml() {
+    const blob = generateHtmlBlob();
+    if (!blob) {
+        showToast('No dog log entries to save');
+        return;
+    }
+
     // Create and download the HTML file
-    const blob = new Blob([htmlContent], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -945,6 +977,115 @@ if (collapsibleTab && infoColumns) {
             tabText.textContent = 'hide ▲';
         }
     });
+}
+
+function showShareConfirmModal() {
+    const blob = generateHtmlBlob();
+    if (!blob) {
+        showToast('No dog log entries to share');
+        return;
+    }
+
+    // Check file size (0x0.st allows up to 512MB, but we'll be conservative)
+    if (blob.size > 100 * 1024 * 1024) { // 100MB limit
+        showToast('Log file is too large to share (over 100MB)');
+        return;
+    }
+
+    document.getElementById('shareConfirmModal').style.display = 'flex';
+}
+
+function hideShareConfirmModal() {
+    document.getElementById('shareConfirmModal').style.display = 'none';
+}
+
+function hideShareResultModal() {
+    document.getElementById('shareResultModal').style.display = 'none';
+}
+
+async function shareLog() {
+    hideShareConfirmModal();
+
+    const blob = generateHtmlBlob();
+    if (!blob) {
+        showToast('No dog log entries to share');
+        return;
+    }
+
+    try {
+        showToast('Uploading log...');
+
+        const uniqueId = crypto.randomUUID();
+        const filename = `barklog-${uniqueId}.html`;
+
+        const form = new FormData();
+        form.append('file', blob, filename);
+
+        const response = await fetch('https://dogbark-upload.jatacid.workers.dev/', {
+            method: 'POST',
+            body: form
+        });
+
+        if (!response.ok) {
+            throw new Error(`Upload failed: ${response.status}`);
+        }
+
+        const shareUrl = `${window.location.origin}/log/${filename}`;
+
+        // Show result modal
+        document.getElementById('shareLinkInput').value = shareUrl;
+        document.getElementById('shareResultModal').style.display = 'flex';
+
+        showToast('Log uploaded successfully!');
+
+    } catch (error) {
+        log(`Share error: ${error.message}`);
+        showToast('Upload failed — please check your connection or try again later.');
+    }
+}
+
+function copyShareLink() {
+    const input = document.getElementById('shareLinkInput');
+    input.select();
+    input.setSelectionRange(0, 99999); // For mobile devices
+
+    try {
+        document.execCommand('copy');
+        showToast('Link copied to clipboard!');
+    } catch (error) {
+        // Fallback for browsers that don't support execCommand
+        navigator.clipboard.writeText(input.value).then(() => {
+            showToast('Link copied to clipboard!');
+        }).catch(() => {
+            showToast('Failed to copy link');
+        });
+    }
+}
+
+function initModalListeners() {
+    const shareCancelBtn = document.getElementById('shareCancelBtn');
+    const shareConfirmBtn = document.getElementById('shareConfirmBtn');
+    const shareCloseBtn = document.getElementById('shareCloseBtn');
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
+
+    if (shareCancelBtn) shareCancelBtn.addEventListener('click', hideShareConfirmModal);
+    if (shareConfirmBtn) shareConfirmBtn.addEventListener('click', shareLog);
+    if (shareCloseBtn) shareCloseBtn.addEventListener('click', hideShareResultModal);
+    if (copyLinkBtn) copyLinkBtn.addEventListener('click', copyShareLink);
+
+    // Close modals when clicking outside
+    const confirmModal = document.getElementById('shareConfirmModal');
+    const resultModal = document.getElementById('shareResultModal');
+    if (confirmModal) {
+        confirmModal.addEventListener('click', function(e) {
+            if (e.target === this) hideShareConfirmModal();
+        });
+    }
+    if (resultModal) {
+        resultModal.addEventListener('click', function(e) {
+            if (e.target === this) hideShareResultModal();
+        });
+    }
 }
 
 window.addEventListener('load', init);

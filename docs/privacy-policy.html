@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy Policy - Open Source Dog Barking Detector</title>
-    <link rel="icon" type="image/svg+xml" href="favicon.png?v=1.0.13">
+    <link rel="icon" type="image/svg+xml" href="favicon.png?v=1.0.14">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -76,8 +76,10 @@
         <li>TensorFlow.js libraries (loaded from CDN for optimal performance)</li>
         <li>YAMNet model files (hosted locally for offline functionality)</li>
         <li>PayPal donation button (optional, only if you choose to donate)</li>
+        <li><strong>Cloudflare R2</strong> (optional, only when sharing exported logs)</li>
     </ul>
     <p>While TensorFlow.js is loaded from a CDN, all audio processing and machine learning inference happens locally in your browser. No audio data is transmitted to external servers.</p>
+    <p>The app uses <em>Cloudflare R2</em> to host exported logs temporarily for sharing. Files uploaded there are public to anyone with the link. Users should avoid including sensitive or personal data in shared logs.</p>
 
     <h2>Analytics</h2>
     <p>This website uses Cloudflare for basic web analytics. Cloudflare may collect anonymous information about your visit, such as:</p>

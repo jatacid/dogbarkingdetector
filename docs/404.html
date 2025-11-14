@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirecting...</title>
+</head>
+<body>
+    <p>Redirecting...</p>
+    <script>
+        const path = window.location.pathname;
+        if (path.startsWith('/log/')) {
+            const filename = path.substring(5); // Remove '/log/' prefix
+            const redirectUrl = `https://pub-3489bbf4aa6e4ffd94a2e5ac3822ef89.r2.dev/${filename}`;
+            window.location.href = redirectUrl;
+        } else {
+            // For other 404s, show a message or redirect to home
+            document.body.innerHTML = '<p>Page not found. <a href="/">Go home</a></p>';
+        }
+    </script>
+</body>
+</html>

@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Completely open source and offline dog barking detector using machine learning to log barks. Build evidence against noisy neighbors or monitor your pet.">
     <title>Dog Barking Detector</title>
-    <link rel="icon" type="image/svg+xml" href="favicon.png?v=1.0.13">
-    <link rel="stylesheet" href="style.css?v=1.0.13">
+    <link rel="icon" type="image/svg+xml" href="favicon.png?v=1.0.14">
+    <link rel="stylesheet" href="style.css?v=1.0.14">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -42,7 +42,7 @@
 </head>
 <body>
     <header class="header">
-        <a href="https://dogbarkingdetector.com" style="text-decoration: none;"><h1 style="padding-right: 40px;"><img src="favicon.png?v=1.0.13" alt="Dog Barking Detector Icon" style="width: 40px; height: 40px; vertical-align: middle; margin-right: 10px;">Dog Barking Detector</h1></a>
+        <a href="https://dogbarkingdetector.com" style="text-decoration: none;"><h1 style="padding-right: 40px;"><img src="favicon.png?v=1.0.14" alt="Dog Barking Detector Icon" style="width: 40px; height: 40px; vertical-align: middle; margin-right: 10px;">Dog Barking Detector</h1></a>
     </header>
     <div class="container">
         <div id="toast" class="toast" style="display: none;"></div>
@@ -101,6 +101,7 @@
                 <div style="display: flex; gap: 5px;">
                     <button id="saveAsCsvBtn" class="icon-btn" title="Download log as CSV file">📊 CSV</button>
                     <button id="saveAsHtmlBtn" class="icon-btn" title="Save as HTML with audio (right-click → Open in browser to retain audio)">💾 HTML</button>
+                    <button id="shareBtn" class="icon-btn" title="Share log via temporary link">🔗 Share</button>
                 </div>
             </div>
             <table id="dogLogTable">
@@ -116,9 +117,41 @@
             </table>
         </div>
     </div>
+
+    <!-- Modals -->
+    <div id="shareConfirmModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Share Your Log?</h3>
+            <p>This will upload your barking log to a temporary hosting service with Cloudflare R2.</p>
+            <p>Anyone with the links can view and download it.</p>
+            <p>Files cannot be deleted once uploaded.</p>
+            <p>Files are hosted temporarily and <strong>automatically deleted after 30 days.</strong></p>
+            <p>Avoid sharing logs that include personal or sensitive data.</p>
+            <div class="modal-buttons">
+                <button id="shareCancelBtn" class="modal-btn cancel-btn">Cancel</button>
+                <button id="shareConfirmBtn" class="modal-btn confirm-btn">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="shareResultModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Your Share Link is Ready</h3>
+            <p>Your log has been uploaded successfully.</p>
+            <p>Share this link — it will expire automatically after 30 days.</p>
+            <div class="share-link-container">
+                <input type="text" id="shareLinkInput" readonly>
+                <button id="copyLinkBtn" class="copy-btn">Copy Link</button>
+            </div>
+            <div class="modal-buttons">
+                <button id="shareCloseBtn" class="modal-btn close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
     <footer class="footer">
         <div class="footer-content">
-            <span id="versionDisplay">v1.0.13</span>
+            <span id="versionDisplay">v1.0.14</span>
             <a href="https://j7digital.com/" target="_blank">Support & Contact</a>
             <a href="privacy-policy.html">Privacy Policy</a>
             <a href="https://github.com/jatacid/dogbarkingdetector" target="_blank"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>GitHub</a>
@@ -126,8 +159,8 @@
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.15.0/dist/tf-backend-wasm.js"></script>
-    <script src="libs/yamnet.js?v=1.0.13"></script>
-    <script src="app.js?v=1.0.13"></script>
+    <script src="libs/yamnet.js?v=1.0.14"></script>
+    <script src="app.js?v=1.0.14"></script>
 
 </body>
 </html>
