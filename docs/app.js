@@ -11,6 +11,7 @@ let sensitivitySlider;
 let sensitivityValue;
 let detectionList;
 let dogLogBody;
+let totalRecordingsDisplay;
 let sensitivity = 0.3;
 let lastDetectionTime = 0;
 let lastLoggedDetectionTime = 0;
@@ -18,12 +19,14 @@ let mediaStream = null;
 let saveAsHtmlBtn;
 let saveAsCsvBtn;
 let shareBtn;
+let shareAppBtn;
 let micHelpText;
 let hasShared = false;
 let lastShareUrl = '';
 let audioTickCount = 0;
 let wakeAudioSource = null;
 let wakeLock = null;
+let totalRecordings = 0;
 const WINDOW_SIZE = 15360; // 0.96s at 16kHz
 const HOP_SIZE = 7680; // 0.48s at 16kHz
 const SAVE_BUFFER_SIZE = 32000; // 2s at 16kHz for full bark capture
@@ -49,9 +52,11 @@ async function init() {
     sensitivityValue = document.getElementById('sensitivityValue');
     detectionList = document.getElementById('detectionList');
     dogLogBody = document.getElementById('dogLogBody');
+    totalRecordingsDisplay = document.getElementById('totalRecordings');
     saveAsHtmlBtn = document.getElementById('saveAsHtmlBtn');
     saveAsCsvBtn = document.getElementById('saveAsCsvBtn');
     shareBtn = document.getElementById('shareBtn');
+    shareAppBtn = document.getElementById('shareAppBtn');
     micHelpText = document.getElementById('micHelpText');
 
     loadBtn.addEventListener('click', loadModels);
@@ -60,12 +65,16 @@ async function init() {
     saveAsHtmlBtn.addEventListener('click', saveAsHtml);
     saveAsCsvBtn.addEventListener('click', saveAsCsv);
     shareBtn.addEventListener('click', handleShareClick);
+    shareAppBtn.addEventListener('click', shareApp);
 
     // Add placeholder entries to dog log immediately
     addPlaceholderEntries();
 
     // Initialize detection list with placeholder values
     updateDetectionList([]);
+
+    // Initialize total recordings display
+    updateTotalRecordings();
 
     // Initialize modal event listeners
     initModalListeners();
@@ -433,6 +442,14 @@ async function processYamnetWindow(yamnetInput) {
                     log(`Detection: ${soundList}`);
                     showToast('Detection logged!');
 
+                    // Temporarily update the page title to 'Captured!'
+                    const originalTitle = document.title;
+                    document.title = 'Captured!';
+                    // Revert title after toast duration (1.5 seconds)
+                    setTimeout(() => {
+                        document.title = originalTitle;
+                    }, 1500);
+
                     // Capture full 2-second buffer around detection
                     const capturedAudio = new Float32Array(SAVE_BUFFER_SIZE);
                     if (bufferFilled) {
@@ -474,6 +491,10 @@ async function processYamnetWindow(yamnetInput) {
 function updateSensitivity() {
     sensitivity = parseFloat(sensitivitySlider.value);
     sensitivityValue.textContent = sensitivity.toFixed(1);
+}
+
+function updateTotalRecordings() {
+    totalRecordingsDisplay.textContent = `Total Recordings = ${totalRecordings}`;
 }
 
 function updateDetectionList(topClasses) {
@@ -544,6 +565,9 @@ function addPlaceholderEntries() {
 
 function deleteRow(row) {
     row.remove();
+    // Update total recordings counter
+    totalRecordings--;
+    updateTotalRecordings();
 }
 
 function addToDogLog(timestamp, soundName, confidence, audioData, sampleRate) {
@@ -609,6 +633,10 @@ function addToDogLog(timestamp, soundName, confidence, audioData, sampleRate) {
     row.timestamp = formattedTimestamp;
 
     dogLogBody.appendChild(row);
+
+    // Update total recordings counter
+    totalRecordings++;
+    updateTotalRecordings();
 }
 
 function log(message) {
@@ -832,6 +860,7 @@ function generateHtmlBlob() {
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         h1 { color: #333; }
+        .total-recordings { font-size: 18px; color: #666; margin-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
@@ -843,6 +872,7 @@ function generateHtmlBlob() {
 <body>
     <h1>Dog Barking Log - ${new Date().toLocaleDateString()}</h1>
     <p>Generated on ${new Date().toLocaleString()}</p>
+    <div class="total-recordings">Total Recordings = ${totalRecordings}</div>
     <table>
         <thead>
             <tr>
@@ -920,7 +950,7 @@ function saveAsCsv() {
         return;
     }
 
-    let csvContent = 'Timestamp,Sound Recorded\n';
+    let csvContent = `Total Recordings = ${totalRecordings}\nTimestamp,Sound Recorded\n`;
 
     rows.forEach((row) => {
         if (row.timestamp && row.soundName) {
@@ -1106,6 +1136,49 @@ function openShareLink() {
         const fullUrl = 'https://' + url;
         window.open(fullUrl, '_blank');
     }
+}
+
+function shareApp() {
+    const url = window.location.href;
+    const title = 'Dog Barking Detector';
+    const text = 'Check out this open source dog barking detector, perfect for monitoring a noisy pet!';
+
+    if (navigator.share) {
+        // Use native share API
+        navigator.share({
+            title: title,
+            text: text,
+            url: url
+        }).catch(err => {
+            log(`Share error: ${err.message}`);
+        });
+    } else {
+        // Fallback: copy to clipboard
+        const shareText = `${title}\n${text}\n${url}`;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(shareText).then(() => {
+                showToast('App link copied to clipboard!');
+            }).catch(() => {
+                fallbackCopy(shareText);
+            });
+        } else {
+            fallbackCopy(shareText);
+        }
+    }
+}
+
+function fallbackCopy(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+        document.execCommand('copy');
+        showToast('App link copied to clipboard!');
+    } catch (err) {
+        showToast('Unable to copy link. Please copy manually.');
+    }
+    document.body.removeChild(textArea);
 }
 
 function initModalListeners() {
