@@ -99,6 +99,46 @@ h2 {
     color: #000000;
 }
 
+.analysis-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 30px;
+    margin-top: 20px;
+}
+
+.option-card {
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.option-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.option-card h3 {
+    margin-top: 0;
+    color: #000000;
+    font-size: 1.2rem;
+}
+
+.option-card p {
+    color: #666;
+    margin-bottom: 15px;
+    line-height: 1.4;
+}
+
+.card-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 .controls {
     display: flex;
     flex-direction: column;
@@ -113,6 +153,84 @@ h2 {
     padding: 10px 0;
     border-bottom: 1px solid #ddd;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.progress-container {
+    width: 100%;
+    position: relative;
+}
+
+/* Modal progress bar styles - higher specificity */
+.modal .progress-container .progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.modal .progress-container .progress-fill {
+    height: 100%;
+    background-color: #4CAF50;
+    width: 0%;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-color: #fafafa;
+    position: relative;
+    margin-bottom: 10px;
+}
+
+.drop-zone:hover {
+    border-color: #007bff;
+    background-color: #f0f8ff;
+}
+
+.drop-zone.dragover {
+    border-color: #007bff;
+    background-color: #e3f2fd;
+    transform: scale(1.02);
+}
+
+.drop-zone-content {
+    pointer-events: none;
+}
+
+.drop-zone-icon {
+    font-size: 48px;
+    margin-bottom: 10px;
+    opacity: 0.7;
+}
+
+.drop-zone-text {
+    font-size: 16px;
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.drop-zone-hint {
+    font-size: 12px;
+    color: #666;
+}
+
+.drop-zone input[type="file"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
 }
 
 .sensitivity-container {
@@ -846,6 +964,19 @@ button.loading::after {
     .info-columns {
         flex-direction: column;
         gap: 15px;
+    }
+
+    .analysis-options {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .drop-zone {
+        padding: 15px;
+    }
+
+    .drop-zone-icon {
+        font-size: 36px;
     }
 
     .footer-content {

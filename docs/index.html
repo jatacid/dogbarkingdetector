@@ -6,7 +6,7 @@
     <meta name="description" content="Completely open source and offline dog barking detector using machine learning to log barks. Build evidence against noisy neighbors or monitor your pet.">
     <title>Dog Barking Detector Online | The easiest way to track when a dog is barking</title>
     <link rel="icon" type="image/svg+xml" href="favicon.png">
-    <link rel="stylesheet" href="style.css?v=1.0.17">
+    <link rel="stylesheet" href="style.css?v=1.0.18">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -99,10 +99,41 @@
                 </div>
             </div>
         </div>
-        <div class="controls">
-            <button id="loadBtn"><span class="button-text">Load Models & Setup Mic</span><div class="progress-bar"><div class="progress-fill"></div></div></button>
-            <p id="micHelpText" style="display: none; font-size: 12px; color: #666; margin-top: 5px;">You may need to open this in a new tab in a separate browser window. It will not work in in-app browsers.</p>
-            <button id="startStopBtn" disabled>Start Recording</button>
+        <h2>Two ways to analyze audio</h2>
+        <div class="analysis-options">
+            <div class="option-card">
+                <h3>🎤 1. Live Microphone Recording</h3>
+                <p>Record audio in real-time from your microphone and detect dog barks as they happen.</p>
+                <div class="card-controls">
+                    <button id="loadBtn"><span class="button-text">Load Models & Setup Mic</span><div class="progress-bar"><div class="progress-fill"></div></div></button>
+                    <p id="micHelpText" style="display: none; font-size: 12px; color: #666; margin-top: 5px;">You may need to open this in a new tab in a separate browser window. It will not work in in-app browsers.</p>
+                    <button id="startStopBtn" disabled>Start Recording</button>
+                </div>
+            </div>
+            <div class="option-card">
+                <h3>📁 2. Upload Audio/Video File</h3>
+                <p>Upload an audio or video file to analyze the entire recording for dog barks.</p>
+                <div class="card-controls">
+                    <div id="dropZone" class="drop-zone">
+                        <input type="file" id="fileInput" accept="audio/*,video/*">
+                        <div class="drop-zone-content">
+                            <div class="drop-zone-icon">📁</div>
+                            <div class="drop-zone-text">Drop file here or click to browse</div>
+                            <div class="drop-zone-hint">Supports MP3, WAV, MP4, WebM, and more</div>
+                        </div>
+                    </div>
+                    <div id="fileInfo" style="display: none; margin-bottom: 10px; font-size: 14px; color: #666;"></div>
+                    <button id="loadFileModelsBtn"><span class="button-text">Load Models</span><div class="progress-bar"><div class="progress-fill"></div></div></button>
+                    <button id="processFileBtn" disabled>Start Processing</button>
+                    <button id="cancelProcessBtn" style="display: none;">Cancel</button>
+                    <div id="fileProgress" class="progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="fileProgressFill"></div>
+                        </div>
+                        <div id="progressText" style="margin-top: 5px; font-size: 12px; color: #666;">Processing...</div>
+                    </div>
+                </div>
+            </div>
         </div>
         <div id="detection" class="detection-section">
             <h2>Detection</h2>
@@ -144,11 +175,17 @@
     <div id="shareConfirmModal" class="modal" style="display: none;">
         <div class="modal-content">
             <h3>Share Your Log?</h3>
-            <p>This will upload your barking log to a temporary hosting service with Cloudflare R2.</p>
+            <p>This will upload your barking log to a temporary hosting service.</p>
             <p>Anyone with the links can view and download it.</p>
             <p>Files cannot be deleted once uploaded.</p>
             <p>Files are hosted temporarily and <strong>automatically deleted after 30 days.</strong></p>
             <p>Avoid sharing logs that include personal or sensitive data.</p>
+            <div id="shareProgressContainer" class="progress-container" style="display: none; margin-top: 20px;">
+                <div class="progress-bar">
+                    <div id="shareProgressFill" class="progress-fill"></div>
+                </div>
+                <div id="shareProgressText" style="margin-top: 5px; font-size: 12px; color: #666;">Uploading...</div>
+            </div>
             <div class="modal-buttons">
                 <button id="shareCancelBtn" class="modal-btn cancel-btn">Cancel</button>
                 <button id="shareConfirmBtn" class="modal-btn confirm-btn">Continue</button>
@@ -174,7 +211,7 @@
 
     <footer class="footer">
         <div class="footer-content">
-            <span id="versionDisplay">v1.0.17</span>
+            <span id="versionDisplay">v1.0.18</span>
             <a href="https://j7digital.com/" target="_blank">Support & Contact</a>
             <a href="privacy-policy.html">Privacy Policy</a>
             <a href="https://github.com/jatacid/dogbarkingdetector" target="_blank"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>GitHub</a>
@@ -182,8 +219,8 @@
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.15.0/dist/tf-backend-wasm.js"></script>
-    <script src="libs/yamnet.js?v=1.0.17"></script>
-    <script src="app.js?v=1.0.17"></script>
+    <script src="libs/yamnet.js?v=1.0.18"></script>
+    <script src="app.js?v=1.0.18"></script>
 
 </body>
 </html>

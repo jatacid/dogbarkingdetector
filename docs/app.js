@@ -4,8 +4,10 @@ let microphone;
 let processor;
 let isRecording = false;
 let isLoaded = false;
+let isFileModelsLoaded = false;
 let startStopBtn;
 let loadBtn;
+let loadFileModelsBtn;
 let animationId;
 let sensitivitySlider;
 let sensitivityValue;
@@ -27,6 +29,18 @@ let audioTickCount = 0;
 let wakeAudioSource = null;
 let wakeLock = null;
 let totalRecordings = 0;
+let fileInput;
+let fileInfo;
+let processFileBtn;
+let fileProgress;
+let fileProgressFill;
+let progressText;
+let dropZone;
+let cancelProcessBtn;
+let selectedFile = null;
+let isProcessingFile = false;
+let fileCurrentTime = 0; // Current time position in seconds during file processing
+let currentPlayingButton = null; // Track currently playing audio button
 const WINDOW_SIZE = 15360; // 0.96s at 16kHz
 const HOP_SIZE = 7680; // 0.48s at 16kHz
 const SAVE_BUFFER_SIZE = 32000; // 2s at 16kHz for full bark capture
@@ -48,6 +62,7 @@ function updateProgressBar(percentage) {
 async function init() {
     startStopBtn = document.getElementById('startStopBtn');
     loadBtn = document.getElementById('loadBtn');
+    loadFileModelsBtn = document.getElementById('loadFileModelsBtn');
     sensitivitySlider = document.getElementById('sensitivity');
     sensitivityValue = document.getElementById('sensitivityValue');
     detectionList = document.getElementById('detectionList');
@@ -58,14 +73,31 @@ async function init() {
     shareBtn = document.getElementById('shareBtn');
     shareAppBtn = document.getElementById('shareAppBtn');
     micHelpText = document.getElementById('micHelpText');
+    fileInput = document.getElementById('fileInput');
+    fileInfo = document.getElementById('fileInfo');
+    processFileBtn = document.getElementById('processFileBtn');
+    fileProgress = document.getElementById('fileProgress');
+    fileProgressFill = document.getElementById('fileProgressFill');
+    progressText = document.getElementById('progressText');
+    dropZone = document.getElementById('dropZone');
+    cancelProcessBtn = document.getElementById('cancelProcessBtn');
 
     loadBtn.addEventListener('click', loadModels);
+    loadFileModelsBtn.addEventListener('click', loadFileModels);
     startStopBtn.addEventListener('click', toggleRecording);
     sensitivitySlider.addEventListener('input', updateSensitivity);
     saveAsHtmlBtn.addEventListener('click', saveAsHtml);
     saveAsCsvBtn.addEventListener('click', saveAsCsv);
     shareBtn.addEventListener('click', handleShareClick);
     shareAppBtn.addEventListener('click', shareApp);
+    fileInput.addEventListener('change', handleFileSelect);
+    processFileBtn.addEventListener('click', processFile);
+    cancelProcessBtn.addEventListener('click', cancelProcessing);
+
+    // Drag and drop functionality
+    dropZone.addEventListener('dragover', handleDragOver);
+    dropZone.addEventListener('dragleave', handleDragLeave);
+    dropZone.addEventListener('drop', handleDrop);
 
     // Add placeholder entries to dog log immediately
     addPlaceholderEntries();
@@ -78,6 +110,22 @@ async function init() {
 
     // Initialize modal event listeners
     initModalListeners();
+
+    // If models are already loaded (from a previous session or shared loading), update button states
+    if (isLoaded) {
+        loadBtn.querySelector('.button-text').textContent = 'Loaded ✓';
+        loadBtn.disabled = true;
+        startStopBtn.disabled = false;
+        isFileModelsLoaded = true;
+    }
+    if (isFileModelsLoaded) {
+        loadFileModelsBtn.querySelector('.button-text').textContent = 'Models Loaded ✓';
+        loadFileModelsBtn.disabled = true;
+        if (selectedFile) {
+            processFileBtn.disabled = false;
+            processFileBtn.textContent = 'Start Processing';
+        }
+    }
 }
 
 async function loadModels() {
@@ -183,11 +231,19 @@ async function loadModels() {
 
         // Everything loaded successfully
         isLoaded = true;
+        isFileModelsLoaded = true; // Model is now available for file processing too
         loadBtn.classList.remove('loading');
         loadBtn.querySelector('.button-text').textContent = 'Loaded ✓';
         micHelpText.style.display = 'none';
         loadBtn.disabled = true;
         startStopBtn.disabled = false;
+
+        // Enable file processing if a file is selected
+        if (selectedFile) {
+            processFileBtn.disabled = false;
+            processFileBtn.textContent = 'Start Processing';
+        }
+
         updateProgressBar(100);
 
         // Keep progress bar visible briefly after completion
@@ -212,6 +268,85 @@ async function loadModels() {
         loadBtn.classList.remove('loading');
         loadBtn.querySelector('.button-text').textContent = 'Load Models & Setup Mic';
         micHelpText.style.display = 'none';
+        updateProgressBar(0);
+
+        // Reset progress bar on error
+        setTimeout(() => {
+            updateProgressBar(0);
+        }, 100);
+    }
+}
+
+async function loadFileModels() {
+    try {
+        loadFileModelsBtn.disabled = true;
+        loadFileModelsBtn.classList.add('loading');
+        loadFileModelsBtn.querySelector('.button-text').textContent = 'Initializing...';
+        updateProgressBar(10);
+
+        log('Initializing file models...');
+
+        // Set WASM backend explicitly for consistent performance across devices
+        await tf.setBackend('wasm');
+        await tf.ready();
+        log('WASM backend ready for files');
+        loadFileModelsBtn.querySelector('.button-text').textContent = 'Setting up TensorFlow...';
+        updateProgressBar(25);
+
+        // Check if model is already loaded from main mic setup
+        if (!model) {
+            loadFileModelsBtn.querySelector('.button-text').textContent = 'Loading YAMNet model...';
+            updateProgressBar(40);
+            model = await yamnet.load('./model/', {
+                requestInit: {
+                    cache: 'no-cache'
+                }
+            });
+            log('YAMNet model loaded for files');
+            updateProgressBar(60);
+        } else {
+            log('YAMNet model already loaded, skipping...');
+            updateProgressBar(60);
+        }
+
+        loadFileModelsBtn.querySelector('.button-text').textContent = 'Warming up model...';
+        updateProgressBar(80);
+        // Warm up YAMNet inference engine with a test prediction
+        const testBuffer = new Float32Array(16000).fill(0);
+        const warmupPredictions = await model.predict(testBuffer);
+        warmupPredictions.dispose();
+
+        // Everything loaded successfully
+        isFileModelsLoaded = true;
+        loadFileModelsBtn.classList.remove('loading');
+        loadFileModelsBtn.querySelector('.button-text').textContent = 'Models Loaded ✓';
+        loadFileModelsBtn.disabled = true;
+
+        // Enable file processing if a file is selected
+        if (selectedFile) {
+            processFileBtn.disabled = false;
+            processFileBtn.textContent = 'Start Processing';
+        }
+
+        updateProgressBar(100);
+
+        // Keep progress bar visible briefly after completion
+        setTimeout(() => {
+            updateProgressBar(0);
+        }, 2000);
+
+        log('File models ready');
+        showToast('File models loaded! Ready to process files.');
+
+    } catch (error) {
+        const errorDetails = `Name: ${error.name || 'Unknown'}, Message: ${error.message || error.toString() || 'No message'}, Stack: ${error.stack ? error.stack.split('\n')[0] : 'No stack'}`;
+        log(`ERROR loading file models: ${error.message}`);
+
+        showToast(`Error loading models: ${error.message || error.toString()}`);
+
+        loadFileModelsBtn.disabled = false;
+        loadFileModelsBtn.classList.remove('loading');
+        loadFileModelsBtn.querySelector('.button-text').textContent = 'Load Models';
         updateProgressBar(0);
 
         // Reset progress bar on error
@@ -254,6 +389,12 @@ async function startRecording() {
         windowPosition = 0;
         predictionBuffer = [];
         predictionCount = 0;
+
+        // Disable file processing during live recording
+        processFileBtn.disabled = true;
+        if (selectedFile) {
+            processFileBtn.textContent = 'Recording in progress';
+        }
 
         // Request wake lock to prevent device sleep, fallback to silent audio
         if ('wakeLock' in navigator) {
@@ -304,13 +445,25 @@ function stopRecording() {
         stopWakeAudio();
     }
 
+    // Re-enable file processing if models are loaded and file is selected
+    if (isLoaded && selectedFile) {
+        processFileBtn.disabled = false;
+        processFileBtn.textContent = 'Start Processing';
+    }
+
     // Already logged above
 }
 
 function processAudioChunk(audioData, sampleRate) {
     try {
-        // Add data to window buffer (already resampled to 16kHz)
+        // Process audio data and fill both buffers simultaneously
         for (let i = 0; i < audioData.length; i++) {
+            // Add to save buffer first (for bark capture)
+            saveBuffer[saveIndex] = audioData[i];
+            saveIndex = (saveIndex + 1) % SAVE_BUFFER_SIZE;
+            if (saveIndex === 0) bufferFilled = true;
+
+            // Add to window buffer for YAMNet processing
             if (windowPosition < WINDOW_SIZE) {
                 windowBuffer[windowPosition] = audioData[i];
                 windowPosition++;
@@ -318,11 +471,8 @@ function processAudioChunk(audioData, sampleRate) {
                 // Window is full, shift by hop size and add new data
                 windowBuffer.copyWithin(0, HOP_SIZE);
                 windowPosition = WINDOW_SIZE - HOP_SIZE;
-                for (let j = 0; j < Math.min(HOP_SIZE, audioData.length - i); j++) {
-                    windowBuffer[windowPosition + j] = audioData[i + j];
-                }
-                windowPosition += Math.min(HOP_SIZE, audioData.length - i);
-                i += Math.min(HOP_SIZE, audioData.length - i) - 1;
+                windowBuffer[windowPosition] = audioData[i];
+                windowPosition++;
 
                 // Only process every full window (every 0.96s), not every hop
                 // This ensures we process once per complete window, not every 0.48s
@@ -422,7 +572,7 @@ async function processYamnetWindow(yamnetInput) {
             const shouldDetectDog = hasSpecificDogSound && (detectedDogs.length > 0 || hasGeneralAnimalClass);
 
             if (shouldDetectDog) {
-                const currentTime = Date.now() / 1000; // Current time in seconds
+                const currentTime = isProcessingFile ? fileCurrentTime : (Date.now() / 1000); // Use file time or real time
                 const timeSinceLastLog = currentTime - lastLoggedDetectionTime;
 
                 // Get all dog-related classes above 1% threshold for logging
@@ -437,18 +587,23 @@ async function processYamnetWindow(yamnetInput) {
 
                 const soundList = relevantClasses.map(item => `${item.name} (${(item.score * 100).toFixed(1)}%)`).join(', ');
 
-                if (timeSinceLastLog >= 4) {
+                // For file processing, no cooldown - log every detection
+                if (isProcessingFile || timeSinceLastLog >= 4.0) {
                     // Log to console and add to dog log
                     log(`Detection: ${soundList}`);
-                    showToast('Detection logged!');
+                    if (!isProcessingFile) {
+                        showToast('Detection logged!');
+                    }
 
-                    // Temporarily update the page title to 'Captured!'
-                    const originalTitle = document.title;
-                    document.title = 'Captured!';
-                    // Revert title after toast duration (1.5 seconds)
-                    setTimeout(() => {
-                        document.title = originalTitle;
-                    }, 1500);
+                    // Temporarily update the page title to 'Captured!' (only for live recording)
+                    if (!isProcessingFile) {
+                        const originalTitle = document.title;
+                        document.title = 'Captured!';
+                        // Revert title after toast duration (1.5 seconds)
+                        setTimeout(() => {
+                            document.title = originalTitle;
+                        }, 1500);
+                    }
 
                     // Capture full 2-second buffer around detection
                     const capturedAudio = new Float32Array(SAVE_BUFFER_SIZE);
@@ -467,12 +622,23 @@ async function processYamnetWindow(yamnetInput) {
                         }
                     }
 
-                    const timestamp = new Date().toLocaleTimeString();
+
+                    // Create timestamp string
+                    let timestamp;
+                    if (isProcessingFile) {
+                        // Format as MM:SS for file processing
+                        const minutes = Math.floor(fileCurrentTime / 60);
+                        const seconds = Math.floor(fileCurrentTime % 60);
+                        timestamp = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} (file)`;
+                    } else {
+                        timestamp = new Date().toLocaleTimeString();
+                    }
+
                     addToDogLog(timestamp, soundList, '', capturedAudio, 16000);
                     lastLoggedDetectionTime = currentTime;
                 } else {
                     // Log to console with cooldown message, but don't add to dog log
-                    log(`Detection Within 4 Second Cooldown: ${soundList}`);
+                    log(`Detection Within ${cooldownTime} Second Cooldown: ${soundList}`);
                 }
             }
 
@@ -604,6 +770,11 @@ function addToDogLog(timestamp, soundName, confidence, audioData, sampleRate) {
     playButton.innerHTML = '▶';
     playButton.className = 'play-btn';
     playButton.addEventListener('click', () => {
+        // Reset any currently playing button
+        if (currentPlayingButton && currentPlayingButton !== playButton) {
+            currentPlayingButton.innerHTML = '▶';
+        }
+        currentPlayingButton = playButton;
         playAudio(audioData, sampleRate);
     });
 
@@ -708,6 +879,14 @@ function showToast(message) {
 
 async function playAudio(audioData, sampleRate) {
     try {
+        // Normalize audio to prevent quiet playback
+        const maxAmp = Math.max(...audioData.map(Math.abs));
+        if (maxAmp > 0) {
+            for (let i = 0; i < audioData.length; i++) {
+                audioData[i] = audioData[i] / maxAmp;
+            }
+        }
+
         // Convert Float32Array to 16-bit PCM
         const pcmData = new Int16Array(audioData.length);
         for (let i = 0; i < audioData.length; i++) {
@@ -725,17 +904,30 @@ async function playAudio(audioData, sampleRate) {
 
         audio.oncanplay = () => {
             audio.play().then(() => {
-                // Playback started successfully
+                // Change button to pause icon when playing starts
+                if (currentPlayingButton) {
+                    currentPlayingButton.innerHTML = '⏸';
+                }
             }).catch(err => {
                 log(`ERROR: Audio playback failed - ${err.message}`);
             });
         };
 
         audio.onended = () => {
+            // Reset button to play icon when audio ends
+            if (currentPlayingButton) {
+                currentPlayingButton.innerHTML = '▶';
+                currentPlayingButton = null;
+            }
             URL.revokeObjectURL(audioUrl); // Clean up the blob URL
         };
 
         audio.onerror = (error) => {
+            // Reset button on error
+            if (currentPlayingButton) {
+                currentPlayingButton.innerHTML = '▶';
+                currentPlayingButton = null;
+            }
             log(`ERROR: Audio element error - ${error.message || 'Unknown error'}`);
             URL.revokeObjectURL(audioUrl);
         };
@@ -1050,6 +1242,17 @@ function showShareConfirmModal() {
 
 function hideShareConfirmModal() {
     document.getElementById('shareConfirmModal').style.display = 'none';
+
+    // Reset progress bar and button states
+    const progressContainer = document.getElementById('shareProgressContainer');
+    const progressFill = document.getElementById('shareProgressFill');
+    const cancelBtn = document.getElementById('shareCancelBtn');
+    const confirmBtn = document.getElementById('shareConfirmBtn');
+
+    progressContainer.style.display = 'none';
+    progressFill.style.width = '0%';
+    cancelBtn.disabled = false;
+    confirmBtn.disabled = false;
 }
 
 function hideShareResultModal() {
@@ -1057,17 +1260,26 @@ function hideShareResultModal() {
 }
 
 async function shareLog() {
-    hideShareConfirmModal();
-
     const blob = generateHtmlBlob();
     if (!blob) {
         showToast('No dog log entries to share');
         return;
     }
 
-    try {
-        showToast('Uploading log...');
+    // Show progress bar and disable buttons
+    const progressContainer = document.getElementById('shareProgressContainer');
+    const progressFill = document.getElementById('shareProgressFill');
+    const progressText = document.getElementById('shareProgressText');
+    const cancelBtn = document.getElementById('shareCancelBtn');
+    const confirmBtn = document.getElementById('shareConfirmBtn');
 
+    progressContainer.style.display = 'block';
+    progressFill.style.width = '0%';
+    progressText.textContent = 'Preparing upload...';
+    cancelBtn.disabled = true;
+    confirmBtn.disabled = true;
+
+    try {
         const array = new Uint8Array(4);
         crypto.getRandomValues(array);
         const shortId = Array.from(array, byte => byte.toString(36)).join('').substring(0, 5);
@@ -1075,6 +1287,10 @@ async function shareLog() {
 
         const form = new FormData();
         form.append('file', blob, filename);
+
+        // Update progress
+        progressFill.style.width = '25%';
+        progressText.textContent = 'Uploading...';
 
         const response = await fetch('https://dogbark-upload.jatacid.workers.dev/', {
             method: 'POST',
@@ -1085,13 +1301,18 @@ async function shareLog() {
             throw new Error(`Upload failed: ${response.status}`);
         }
 
+        // Update progress to complete
+        progressFill.style.width = '100%';
+        progressText.textContent = 'Upload complete!';
+
         const shareUrl = `${window.location.host}/log/${shortId}`;
 
         // Store share state
         hasShared = true;
         lastShareUrl = shareUrl;
 
-        // Show result modal
+        // Hide confirm modal and show result modal
+        hideShareConfirmModal();
         document.getElementById('shareLinkInput').value = shareUrl;
         document.getElementById('shareResultModal').style.display = 'flex';
 
@@ -1100,6 +1321,11 @@ async function shareLog() {
     } catch (error) {
         log(`Share error: ${error.message}`);
         showToast('Upload failed — please check your connection or try again later.');
+
+        // Reset modal state on error
+        progressContainer.style.display = 'none';
+        cancelBtn.disabled = false;
+        confirmBtn.disabled = false;
     }
 }
 
@@ -1181,6 +1407,204 @@ function fallbackCopy(text) {
     document.body.removeChild(textArea);
 }
 
+function handleDragOver(event) {
+    event.preventDefault();
+    dropZone.classList.add('dragover');
+}
+
+function handleDragLeave(event) {
+    event.preventDefault();
+    dropZone.classList.remove('dragover');
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    dropZone.classList.remove('dragover');
+
+    const files = event.dataTransfer.files;
+    if (files.length > 0) {
+        // Create a fake event to reuse handleFileSelect
+        const fakeEvent = { target: { files: [files[0]] } };
+        handleFileSelect(fakeEvent);
+    }
+}
+
+function cancelProcessing() {
+    if (isProcessingFile) {
+        isProcessingFile = false;
+        showToast('File processing cancelled');
+
+        // Reset UI
+        fileProgress.style.display = 'none';
+        processFileBtn.disabled = false;
+        processFileBtn.textContent = 'Start Processing';
+        cancelProcessBtn.style.display = 'none';
+    }
+}
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        selectedFile = null;
+        fileInfo.style.display = 'none';
+        processFileBtn.disabled = true;
+        return;
+    }
+
+    // Validate file type
+    const validTypes = ['audio/', 'video/'];
+    const isValidType = validTypes.some(type => file.type.startsWith(type));
+
+    if (!isValidType) {
+        showToast('Please select a valid audio or video file.');
+        selectedFile = null;
+        fileInfo.style.display = 'none';
+        processFileBtn.disabled = true;
+        return;
+    }
+
+    // Check file size (limit to 100MB for browser compatibility)
+    const maxSize = 100 * 1024 * 1024; // 100MB
+    if (file.size > maxSize) {
+        showToast('File is too large. Please select a file smaller than 100MB.');
+        selectedFile = null;
+        fileInfo.style.display = 'none';
+        processFileBtn.disabled = true;
+        return;
+    }
+
+    selectedFile = file;
+
+    // Show file info
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    const duration = file.duration ? `${file.duration.toFixed(1)}s` : 'Unknown duration';
+    fileInfo.innerHTML = `<strong>${file.name}</strong><br>Size: ${sizeMB} MB<br>Type: ${file.type}`;
+    fileInfo.style.display = 'block';
+
+    // Enable process button if file models are loaded
+    processFileBtn.disabled = !isFileModelsLoaded;
+    if (!isFileModelsLoaded) {
+        processFileBtn.textContent = 'Load models first';
+    } else {
+        processFileBtn.textContent = 'Start Processing';
+    }
+}
+
+async function processFile() {
+    if (!selectedFile || !isFileModelsLoaded) {
+        showToast('Please select a file and load models first.');
+        return;
+    }
+
+    if (isProcessingFile) {
+        showToast('Already processing a file.');
+        return;
+    }
+
+    try {
+        isProcessingFile = true;
+        processFileBtn.disabled = true;
+        processFileBtn.textContent = 'Processing...';
+        cancelProcessBtn.style.display = 'inline-block';
+
+        // Show progress
+        fileProgress.style.display = 'block';
+        updateFileProgress(0, 'Decoding audio...');
+
+        // Create audio context for decoding
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Read file as array buffer
+        const arrayBuffer = await selectedFile.arrayBuffer();
+
+        // Decode audio data
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        updateFileProgress(10, 'Audio decoded, analyzing...');
+
+        // Get mono audio data (mix channels if stereo)
+        const channelData = audioBuffer.getChannelData(0); // Use first channel
+        const sampleRate = audioBuffer.sampleRate;
+        const totalSamples = channelData.length;
+
+        log(`Processing file: ${selectedFile.name}, duration: ${(totalSamples / sampleRate).toFixed(1)}s, sample rate: ${sampleRate}Hz`);
+
+        // Process audio in chunks
+        await processAudioFile(channelData, sampleRate, totalSamples);
+
+        // Hide progress
+        fileProgress.style.display = 'none';
+
+        // Reset UI
+        processFileBtn.disabled = false;
+        processFileBtn.textContent = 'Start Processing';
+        cancelProcessBtn.style.display = 'none';
+        isProcessingFile = false;
+
+        showToast('File processing complete!');
+
+    } catch (error) {
+        log(`File processing error: ${error.message}`);
+        showToast(`Error processing file: ${error.message}`);
+
+        // Reset UI
+        fileProgress.style.display = 'none';
+        processFileBtn.disabled = false;
+        processFileBtn.textContent = 'Start Processing';
+        cancelProcessBtn.style.display = 'none';
+        isProcessingFile = false;
+    }
+}
+
+function updateFileProgress(percentage, text) {
+    fileProgressFill.style.width = percentage + '%';
+    progressText.textContent = text;
+}
+
+async function processAudioFile(audioData, sampleRate, totalSamples) {
+    // Reset buffers for file processing
+    windowBuffer = new Float32Array(WINDOW_SIZE);
+    saveBuffer = new Float32Array(SAVE_BUFFER_SIZE);
+    saveIndex = 0;
+    bufferFilled = false;
+    windowPosition = 0;
+    predictionBuffer = [];
+    predictionCount = 0;
+    fileCurrentTime = 0;
+
+    // Resample to 16kHz if needed
+    let processedData = audioData;
+    if (sampleRate !== 16000) {
+        processedData = resampleAudio(audioData, sampleRate, 16000);
+        sampleRate = 16000;
+    }
+
+    const chunkSize = 10000; // Process in 10k sample chunks (about 0.625s at 16kHz)
+    let processedSamples = 0;
+
+    for (let i = 0; i < processedData.length; i += chunkSize) {
+        if (!isProcessingFile) break; // Allow cancellation
+
+        const chunk = processedData.slice(i, i + chunkSize);
+        processedSamples += chunk.length;
+
+        // Update current time position
+        fileCurrentTime = processedSamples / sampleRate;
+
+        // Update progress
+        const progress = Math.min(90, 10 + (processedSamples / processedData.length) * 80);
+        updateFileProgress(progress, `Analyzing... ${Math.round(fileCurrentTime * 10) / 10}s processed`);
+
+        // Process chunk
+        await processAudioChunk(chunk, sampleRate);
+
+        // Small delay to prevent blocking UI
+        await new Promise(resolve => setTimeout(resolve, 1));
+    }
+
+    updateFileProgress(100, 'Analysis complete');
+}
+
 function initModalListeners() {
     const shareCancelBtn = document.getElementById('shareCancelBtn');
     const shareConfirmBtn = document.getElementById('shareConfirmBtn');
@@ -1199,7 +1623,14 @@ function initModalListeners() {
     const resultModal = document.getElementById('shareResultModal');
     if (confirmModal) {
         confirmModal.addEventListener('click', function(e) {
-            if (e.target === this) hideShareConfirmModal();
+            if (e.target === this) {
+                // Don't allow closing if upload is in progress
+                const progressContainer = document.getElementById('shareProgressContainer');
+                if (progressContainer && progressContainer.style.display !== 'none') {
+                    return;
+                }
+                hideShareConfirmModal();
+            }
         });
     }
     if (resultModal) {

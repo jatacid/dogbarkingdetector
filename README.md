@@ -46,11 +46,12 @@ docs/
 ### Core Functionality
 
 1. **Audio Capture**: Uses Web Audio API to access microphone input
-2. **Real-time Processing**: AudioWorklet captures raw audio data in real-time
-3. **Machine Learning**: YAMNet model classifies 1-second audio chunks into 521 sound categories
-4. **Dog Detection**: Specifically monitors for dog vocalization classes such as Dog, Bark, YIp, etc
-5. **Logging**: Records detections with timestamps and audio playback capability
-6. **Visualization**: Real-time detection confidence scores
+2. **File Upload**: Allows uploading audio or video files for offline analysis
+3. **Real-time Processing**: AudioWorklet captures raw audio data in real-time
+4. **Machine Learning**: YAMNet model classifies 1-second audio chunks into 521 sound categories
+5. **Dog Detection**: Specifically monitors for dog vocalization classes such as Dog, Bark, YIp, etc
+6. **Logging**: Records detections with timestamps and audio playback capability
+7. **Visualization**: Real-time detection confidence scores
 
 
 ### Technical Details
@@ -59,7 +60,7 @@ docs/
 - **Sample Rate**: 16kHz (resampled from browser's native rate)
 - **Chunk Size**: 1 second of audio per inference
 - **Classes**: 521 total, focused on dog sounds (classes 70-75)
-- **Privacy**: All processing happens client-side, no audio data leaves the browser
+- **Privacy**: All processing happens client-side, no audio data (from microphone or uploaded files) leaves the browser
 - **Dependencies**: TensorFlow.js (loaded from CDN), YAMNet wrapper library
 
 ## Important Notes

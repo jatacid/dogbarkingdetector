@@ -55,12 +55,12 @@
     <p>The Open Source Dog Barking Detector is a completely offline, browser-based application that processes all audio data locally on your device. We are committed to protecting your privacy and ensuring that no personal data is collected, stored, or transmitted.</p>
 
     <h2>How the Tool Works</h2>
-    <p>This tool uses machine learning (specifically the YAMNet audio classification model via TensorFlow.js) to analyze audio input from your microphone in real-time. All processing happens entirely within your web browser - no audio data, recordings, or analysis results are ever sent to external servers.</p>
+    <p>This tool uses machine learning (specifically the YAMNet audio classification model via TensorFlow.js) to analyze audio input from your microphone in real-time or from uploaded audio/video files. All processing happens entirely within your web browser - no audio data, recordings, or analysis results are ever sent to external servers.</p>
 
     <h2>Data Collection and Storage</h2>
     <p><strong>We do not collect, store, or transmit any personal data.</strong></p>
     <ul>
-        <li>No audio recordings are saved permanently</li>
+        <li>No audio recordings (from microphone or uploaded files) are saved permanently</li>
         <li>No detection logs are uploaded to servers</li>
         <li>No user information is collected</li>
         <li>No cookies are used for tracking</li>
@@ -68,7 +68,7 @@
     </ul>
 
     <h2>Audio Processing</h2>
-    <p>Audio is captured temporarily in your browser's memory for real-time analysis. The audio data is processed in 1-second chunks and immediately discarded after classification. No audio is stored on your device beyond the temporary buffer required for processing.</p>
+    <p>Audio is captured temporarily in your browser's memory for real-time analysis or loaded from uploaded files. The audio data is processed in 1-second chunks and immediately discarded after classification. No audio is stored on your device beyond the temporary buffer required for processing.</p>
 
     <h2>Third-Party Services</h2>
     <p>The external resources loaded are:</p>
@@ -94,11 +94,15 @@
     <h2>Microphone Access</h2>
     <p>The tool requests access to your microphone only when you click "Start Recording". Audio data is processed locally and is not transmitted anywhere. You can revoke microphone access at any time through your browser settings.</p>
 
+    <h2>File Upload</h2>
+    <p>You can optionally upload audio or video files for analysis. Uploaded files are processed entirely within your browser and are not transmitted to external servers. Files are loaded into temporary memory for processing and are not stored on your device after analysis.</p>
+
     <h2>Browser Permissions</h2>
     <p>The application requires the following browser permissions:</p>
     <ul>
         <li><strong>getUserMedia</strong>: For microphone access (granted when you start recording)</li>
         <li><strong>Web Audio API</strong>: For audio processing (no permission required)</li>
+        <li><strong>File API</strong>: For uploading audio/video files (no permission required)</li>
     </ul>
 
     <h2>Data Security</h2>
