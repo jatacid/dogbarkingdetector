@@ -87,7 +87,50 @@ function saveTelegramConfig() {
     localStorage.setItem('dogBarkingDetector.telegramChatId', telegramChatId);
 }
 
-async function sendTelegramAlert(detectionLabel, confidence) {
+function createTelegramAudioBlob(audioData, sampleRate) {
+    if (!audioData || !audioData.length) {
+        return null;
+    }
+
+    const samples = new Int16Array(audioData.length);
+    for (let i = 0; i < audioData.length; i++) {
+        const sample = Math.max(-1, Math.min(1, audioData[i]));
+        samples[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+    }
+
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+
+    const writeString = (offset, str) => {
+        for (let i = 0; i < str.length; i++) {
+            view.setUint8(offset + i, str.charCodeAt(i));
+        }
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++) {
+        view.setInt16(offset, samples[i], true);
+        offset += 2;
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
+}
+
+async function sendTelegramAlert(detectionLabel, confidence, audioData = null, sampleRate = 16000) {
     if (!telegramBotToken || !telegramChatId) {
         return;
     }
@@ -102,13 +145,33 @@ async function sendTelegramAlert(detectionLabel, confidence) {
 
     const normalizedBotToken = telegramBotToken.replace(/^bot/i, '');
     const message = `Dog vocalization detected: ${detectionLabel} (${confidence}%)`;
-    const endpoint = `https://api.telegram.org/bot${normalizedBotToken}/sendMessage?chat_id=${encodeURIComponent(telegramChatId)}&text=${encodeURIComponent(message)}`;
+    const textEndpoint = `https://api.telegram.org/bot${normalizedBotToken}/sendMessage?chat_id=${encodeURIComponent(telegramChatId)}&text=${encodeURIComponent(message)}`;
 
     try {
-        const response = await fetch(endpoint);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+        const textResponse = await fetch(textEndpoint);
+        if (!textResponse.ok) {
+            throw new Error(`HTTP ${textResponse.status}`);
         }
+
+        if (audioData && audioData.length) {
+            const audioBlob = createTelegramAudioBlob(audioData, sampleRate);
+            if (audioBlob) {
+                const audioFormData = new FormData();
+                audioFormData.append('chat_id', telegramChatId);
+                audioFormData.append('caption', message);
+                audioFormData.append('audio', audioBlob, 'detection.wav');
+
+                const audioResponse = await fetch(`https://api.telegram.org/bot${normalizedBotToken}/sendAudio`, {
+                    method: 'POST',
+                    body: audioFormData
+                });
+
+                if (!audioResponse.ok) {
+                    throw new Error(`Audio HTTP ${audioResponse.status}`);
+                }
+            }
+        }
+
         log(`Telegram alert sent: ${message}`);
     } catch (error) {
         log(`Telegram alert failed: ${error.message}`);
@@ -651,26 +714,6 @@ async function processYamnetWindow(yamnetInput) {
 
                 // For file processing, no cooldown - log every detection
                 if (isProcessingFile || timeSinceLastLog >= 4.0) {
-                    // Log to console and add to dog log
-                    log(`Detection: ${soundList}`);
-                    const topDetection = relevantClasses[0];
-                    const detectionLabel = topDetection ? topDetection.name : 'dog vocalization';
-                    const confidenceValue = topDetection ? (topDetection.score * 100).toFixed(1) : '0.0';
-                    void sendTelegramAlert(detectionLabel, confidenceValue);
-                    if (!isProcessingFile) {
-                        showToast('Detection logged!');
-                    }
-
-                    // Temporarily update the page title to 'Captured!' (only for live recording)
-                    if (!isProcessingFile) {
-                        const originalTitle = document.title;
-                        document.title = 'Captured!';
-                        // Revert title after toast duration (1.5 seconds)
-                        setTimeout(() => {
-                            document.title = originalTitle;
-                        }, 1500);
-                    }
-
                     // Capture full 2-second buffer around detection
                     const capturedAudio = new Float32Array(SAVE_BUFFER_SIZE);
                     if (bufferFilled) {
@@ -688,6 +731,25 @@ async function processYamnetWindow(yamnetInput) {
                         }
                     }
 
+                    // Log to console and add to dog log
+                    log(`Detection: ${soundList}`);
+                    const topDetection = relevantClasses[0];
+                    const detectionLabel = topDetection ? topDetection.name : 'dog vocalization';
+                    const confidenceValue = topDetection ? (topDetection.score * 100).toFixed(1) : '0.0';
+                    void sendTelegramAlert(detectionLabel, confidenceValue, capturedAudio, 16000);
+                    if (!isProcessingFile) {
+                        showToast('Detection logged!');
+                    }
+
+                    // Temporarily update the page title to 'Captured!' (only for live recording)
+                    if (!isProcessingFile) {
+                        const originalTitle = document.title;
+                        document.title = 'Captured!';
+                        // Revert title after toast duration (1.5 seconds)
+                        setTimeout(() => {
+                            document.title = originalTitle;
+                        }, 1500);
+                    }
 
                     // Create timestamp string
                     let timestamp;
