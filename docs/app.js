@@ -18,6 +18,11 @@ let sensitivity = 0.3;
 let lastDetectionTime = 0;
 let lastLoggedDetectionTime = 0;
 let mediaStream = null;
+let telegramBotTokenInput;
+let telegramChatIdInput;
+let telegramBotToken = '';
+let telegramChatId = '';
+let lastTelegramAlertTime = 0;
 let saveAsHtmlBtn;
 let saveAsCsvBtn;
 let shareBtn;
@@ -59,6 +64,57 @@ function updateProgressBar(percentage) {
     }
 }
 
+function loadTelegramConfig() {
+    if (!telegramBotTokenInput || !telegramChatIdInput) {
+        return;
+    }
+
+    telegramBotToken = localStorage.getItem('dogBarkingDetector.telegramBotToken') || '';
+    telegramChatId = localStorage.getItem('dogBarkingDetector.telegramChatId') || '';
+    telegramBotTokenInput.value = telegramBotToken;
+    telegramChatIdInput.value = telegramChatId;
+}
+
+function saveTelegramConfig() {
+    if (!telegramBotTokenInput || !telegramChatIdInput) {
+        return;
+    }
+
+    telegramBotToken = telegramBotTokenInput.value.trim();
+    telegramChatId = telegramChatIdInput.value.trim();
+
+    localStorage.setItem('dogBarkingDetector.telegramBotToken', telegramBotToken);
+    localStorage.setItem('dogBarkingDetector.telegramChatId', telegramChatId);
+}
+
+async function sendTelegramAlert(detectionLabel, confidence) {
+    if (!telegramBotToken || !telegramChatId) {
+        return;
+    }
+
+    const now = Date.now();
+    const telegramCooldownMs = 60000;
+    if (now - lastTelegramAlertTime < telegramCooldownMs) {
+        return;
+    }
+
+    lastTelegramAlertTime = now;
+
+    const normalizedBotToken = telegramBotToken.replace(/^bot/i, '');
+    const message = `Dog vocalization detected: ${detectionLabel} (${confidence}%)`;
+    const endpoint = `https://api.telegram.org/bot${normalizedBotToken}/sendMessage?chat_id=${encodeURIComponent(telegramChatId)}&text=${encodeURIComponent(message)}`;
+
+    try {
+        const response = await fetch(endpoint);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        log(`Telegram alert sent: ${message}`);
+    } catch (error) {
+        log(`Telegram alert failed: ${error.message}`);
+    }
+}
+
 async function init() {
     startStopBtn = document.getElementById('startStopBtn');
     loadBtn = document.getElementById('loadBtn');
@@ -81,6 +137,8 @@ async function init() {
     progressText = document.getElementById('progressText');
     dropZone = document.getElementById('dropZone');
     cancelProcessBtn = document.getElementById('cancelProcessBtn');
+    telegramBotTokenInput = document.getElementById('telegramBotToken');
+    telegramChatIdInput = document.getElementById('telegramChatId');
 
     loadBtn.addEventListener('click', loadModels);
     loadFileModelsBtn.addEventListener('click', loadFileModels);
@@ -93,6 +151,8 @@ async function init() {
     fileInput.addEventListener('change', handleFileSelect);
     processFileBtn.addEventListener('click', processFile);
     cancelProcessBtn.addEventListener('click', cancelProcessing);
+    if (telegramBotTokenInput) telegramBotTokenInput.addEventListener('input', saveTelegramConfig);
+    if (telegramChatIdInput) telegramChatIdInput.addEventListener('input', saveTelegramConfig);
 
     // Drag and drop functionality
     dropZone.addEventListener('dragover', handleDragOver);
@@ -110,6 +170,7 @@ async function init() {
 
     // Initialize modal event listeners
     initModalListeners();
+    loadTelegramConfig();
 
     // If models are already loaded (from a previous session or shared loading), update button states
     if (isLoaded) {
@@ -574,6 +635,7 @@ async function processYamnetWindow(yamnetInput) {
             if (shouldDetectDog) {
                 const currentTime = isProcessingFile ? fileCurrentTime : (Date.now() / 1000); // Use file time or real time
                 const timeSinceLastLog = currentTime - lastLoggedDetectionTime;
+                const cooldownTime = 4.0;
 
                 // Get all dog-related classes above 1% threshold for logging
                 const allDogClasses = [67, 68, 69, 70, 71, 72, 73, 74, 75, 117]; // Animal, Domestic animals, Dog, Bark, Yip, Howl, Bow-wow, Growling, Whimper, Canidae
@@ -591,6 +653,10 @@ async function processYamnetWindow(yamnetInput) {
                 if (isProcessingFile || timeSinceLastLog >= 4.0) {
                     // Log to console and add to dog log
                     log(`Detection: ${soundList}`);
+                    const topDetection = relevantClasses[0];
+                    const detectionLabel = topDetection ? topDetection.name : 'dog vocalization';
+                    const confidenceValue = topDetection ? (topDetection.score * 100).toFixed(1) : '0.0';
+                    void sendTelegramAlert(detectionLabel, confidenceValue);
                     if (!isProcessingFile) {
                         showToast('Detection logged!');
                     }
