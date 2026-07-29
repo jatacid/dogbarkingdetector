@@ -99,6 +99,15 @@
                 </div>
             </div>
         </div>
+        <div class="telegram-config-section" style="margin-top: 16px; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafafa;">
+            <h3>Telegram Alerts (optional)</h3>
+            <p style="margin-top: 6px;">Enter a Telegram bot token and chat ID to receive a notification whenever a dog vocalization is detected.</p>
+            <div style="display: grid; gap: 8px; max-width: 420px; margin-top: 8px;">
+                <input id="telegramBotToken" type="password" placeholder="Bot token (e.g. 123456789:ABC... )" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <input id="telegramChatId" type="text" placeholder="Chat ID (e.g. 123456789)" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <small style="color: #666;">Values are stored locally in this browser and are never sent to a server by this app.</small>
+            </div>
+        </div>
         <h2>Two ways to analyze audio</h2>
         <div class="analysis-options">
             <div class="option-card">
@@ -227,8 +236,8 @@
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.15.0/dist/tf-backend-wasm.js"></script>
-    <script src="libs/yamnet.js?v=1.0.19"></script>
-    <script src="app.js?v=1.0.19"></script>
+    <script src="libs/yamnet.js?v=1.0.20"></script>
+    <script src="app.js?v=1.0.20"></script>
 
 </body>
 </html>

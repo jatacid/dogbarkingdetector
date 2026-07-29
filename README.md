@@ -63,6 +63,23 @@ docs/
 - **Privacy**: All processing happens client-side, no audio data (from microphone or uploaded files) leaves the browser
 - **Dependencies**: TensorFlow.js (loaded from CDN), YAMNet wrapper library
 
+## Telegram Alerts Setup
+
+You can optionally send Telegram notifications when the detector identifies a dog bark or other dog vocalization.
+
+1. Create a Telegram bot with BotFather and copy the bot token.
+2. Start a chat with the bot in Telegram and send it any message.
+3. Open the app in your browser, then enter the bot token and your chat ID in the Telegram Alerts section.
+4. The values are stored in your browser via local storage and used only by the client-side app.
+
+To find your chat ID, visit the Telegram Bot API endpoint for your bot after sending a message, or use a helper such as @userinfobot.
+
+Example:
+- Bot token: `123456789:ABCDEF...`
+- Chat ID: `123456789`
+
+The app sends a notification only once per minute per detection loop to avoid spamming.
+
 ## Important Notes
 
 ### Legal Disclaimer
